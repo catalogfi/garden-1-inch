@@ -1,0 +1,26 @@
+{
+  "name": "fusion-sepolia-poc",
+  "version": "1.0.0",
+  "description": "1inch Fusion+ SDK PoC on Ethereum Sepolia testnet with Bun",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run index.ts",
+    "start": "bun run index.ts",
+    "type-check": "bun tsc --noEmit"
+  },
+  "dependencies": {
+    "@1inch/cross-chain-sdk": "0.2.1-rc.0",
+    "@coral-xyz/anchor": "^0.31.1",
+    "@types/axios": "^0.14.4",
+    "axios": "^1.11.0",
+    "ethers": "^6.15.0",
+    "web3": "^4.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}

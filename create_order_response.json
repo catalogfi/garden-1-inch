@@ -1,0 +1,180 @@
+{
+  "order": {
+    "inner": {
+      "settlementExtensionContract": {
+        "val": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a"
+      },
+      "inner": {
+        "extension": {
+          "makerAssetSuffix": "0x",
+          "takerAssetSuffix": "0x",
+          "makingAmountData": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a004fbf000001d3688771530000b401147100d9410078004fbf003c",
+          "takingAmountData": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a004fbf000001d3688771530000b401147100d9410078004fbf003c",
+          "predicate": "0x",
+          "makerPermit": "0x",
+          "preInteraction": "0x",
+          "postInteraction": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a6887713bcb4fa6eb00f6ea887a4a000072f8a0c8c415454f629c000010df4b136a509ca753338ba8d38dc09bb7744c9618b0e9632f98cb6f2cadfcaf5e00000000000000000000000000000000000000000000000000000000000000890000000000000000000000002791bca1f2de4661ed88a30c99a7a9449aa84174000000000000000000005954db47f1100000000000000000007a72df305ee9600000000000000240000001c8000000b40000030000000288000001ec00000024",
+          "customData": "0x"
+        },
+        "makerAsset": {
+          "val": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        },
+        "takerAsset": {
+          "val": "0xda0000d4000015a526378bb6fafc650cea5966f8"
+        },
+        "makingAmount": "100000000000000000",
+        "takingAmount": "384299575",
+        "salt": "99721428892393890355600451929096052784091603227924904742788117946943420269650",
+        "maker": {
+          "val": "0x3e53d785995bb74c0b9ba8f71d0d6a0c4d9e6901"
+        },
+        "receiver": {
+          "val": "0xf76f367ad54d8347ca7f1a9d12dde2a6e0a2b0b8"
+        },
+        "makerTraits": {
+          "value": {
+            "value": "62419173104490761595518734106884853154933191473124610746476623474811901837312"
+          }
+        }
+      },
+      "fusionExtension": {
+        "address": {
+          "val": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a"
+        },
+        "auctionDetails": {
+          "startTime": "1753706835",
+          "initialRateBump": "70769",
+          "duration": "180",
+          "points": [
+            {
+              "delay": 120,
+              "coefficient": 55617
+            },
+            {
+              "delay": 60,
+              "coefficient": 20415
+            }
+          ],
+          "gasCost": {
+            "gasPriceEstimate": "467",
+            "gasBumpEstimate": "20415"
+          }
+        },
+        "postInteractionData": {
+          "whitelist": [
+            {
+              "delay": "0",
+              "addressHalf": "cb4fa6eb00f6ea887a4a"
+            },
+            {
+              "delay": "0",
+              "addressHalf": "72f8a0c8c415454f629c"
+            }
+          ],
+          "integratorFee": {
+            "ratio": "0",
+            "receiver": {
+              "val": "0x0000000000000000000000000000000000000000"
+            }
+          },
+          "bankFee": "0",
+          "resolvingStartTime": "1753706811",
+          "customReceiver": {
+            "val": "0xf76f367ad54d8347ca7f1a9d12dde2a6e0a2b0b8"
+          }
+        },
+        "builder": {
+          "makerAssetSuffix": "0x",
+          "takerAssetSuffix": "0x",
+          "makingAmountData": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a004fbf000001d3688771530000b401147100d9410078004fbf003c",
+          "takingAmountData": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a004fbf000001d3688771530000b401147100d9410078004fbf003c",
+          "predicate": "0x",
+          "makerPermit": "0x",
+          "preInteraction": "0x",
+          "postInteraction": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a6887713bcb4fa6eb00f6ea887a4a000072f8a0c8c415454f629c000010",
+          "customData": "0x"
+        },
+        "hashLockInfo": {
+          "value": "0xdf4b136a509ca753338ba8d38dc09bb7744c9618b0e9632f98cb6f2cadfcaf5e"
+        },
+        "dstChainId": 137,
+        "dstToken": {
+          "val": "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
+        },
+        "srcSafetyDeposit": "98220991050000",
+        "dstSafetyDeposit": "34466250073500000",
+        "timeLocks": "0x240000001c8000000b40000030000000288000001ec00000024"
+      },
+      "escrowExtension": {
+        "address": {
+          "val": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a"
+        },
+        "auctionDetails": {
+          "startTime": "1753706835",
+          "initialRateBump": "70769",
+          "duration": "180",
+          "points": [
+            {
+              "delay": 120,
+              "coefficient": 55617
+            },
+            {
+              "delay": 60,
+              "coefficient": 20415
+            }
+          ],
+          "gasCost": {
+            "gasPriceEstimate": "467",
+            "gasBumpEstimate": "20415"
+          }
+        },
+        "postInteractionData": {
+          "whitelist": [
+            {
+              "delay": "0",
+              "addressHalf": "cb4fa6eb00f6ea887a4a"
+            },
+            {
+              "delay": "0",
+              "addressHalf": "72f8a0c8c415454f629c"
+            }
+          ],
+          "integratorFee": {
+            "ratio": "0",
+            "receiver": {
+              "val": "0x0000000000000000000000000000000000000000"
+            }
+          },
+          "bankFee": "0",
+          "resolvingStartTime": "1753706811",
+          "customReceiver": {
+            "val": "0xf76f367ad54d8347ca7f1a9d12dde2a6e0a2b0b8"
+          }
+        },
+        "builder": {
+          "makerAssetSuffix": "0x",
+          "takerAssetSuffix": "0x",
+          "makingAmountData": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a004fbf000001d3688771530000b401147100d9410078004fbf003c",
+          "takingAmountData": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a004fbf000001d3688771530000b401147100d9410078004fbf003c",
+          "predicate": "0x",
+          "makerPermit": "0x",
+          "preInteraction": "0x",
+          "postInteraction": "0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a6887713bcb4fa6eb00f6ea887a4a000072f8a0c8c415454f629c000010",
+          "customData": "0x"
+        },
+        "hashLockInfo": {
+          "value": "0xdf4b136a509ca753338ba8d38dc09bb7744c9618b0e9632f98cb6f2cadfcaf5e"
+        },
+        "dstChainId": 137,
+        "dstToken": {
+          "val": "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
+        },
+        "srcSafetyDeposit": "98220991050000",
+        "dstSafetyDeposit": "34466250073500000",
+        "timeLocks": "0x240000001c8000000b40000030000000288000001ec00000024"
+      }
+    }
+  },
+  "hash": "0xaaad91078f7748b842400fa1de50ea4ccc37f6d3b575fe2795760fae95255399",
+  "quoteId": "a752534a-9aef-41ba-a877-f0290c3ea5de"
+}
