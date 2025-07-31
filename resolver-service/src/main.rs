@@ -1,55 +1,62 @@
-use anyhow::Result;
 use std::time::Duration;
 
+use anyhow::Result;
+
 use crate::oneinch::orders::OrdersClient;
-use crate::order_mapper::{OrderMapperBuilder, create_chain_channel};
+use crate::order_mapper::{create_chain_channel, OrderMapper};
 use crate::resolver::Resolver;
+use crate::settings::Settings;
 
 mod oneinch;
 mod resolver;
+mod settings;
 mod order_mapper;
+
+const SETTINGS_PATH: &str = "settings.toml";
 
 #[tokio::main]
 async fn main() -> Result<()> {
 
     tracing_subscriber::fmt::init();
 
+    let settings = Settings::from_toml(SETTINGS_PATH)?;
+
     let oneinch_api_key = std::env::var("ONEINCH_API_KEY").expect("ONEINCH_API_KEY must be set");
-    let url = "https://api.1inch.dev/fusion-plus".to_string();
+    let url = settings.orders_url.clone();
+    
     let order_client = OrdersClient::new(url.clone(), oneinch_api_key.clone());
 
-    // Create channels for different chains
-    let (eth_sender, eth_receiver) = create_chain_channel();
-    let (polygon_sender, polygon_receiver) = create_chain_channel();
+    let mut  order_mapper_builder = OrderMapper::builder();
 
-    // Create resolvers for different chains
-    let eth_resolver = Resolver::new(eth_receiver);
-    let polygon_resolver = Resolver::new(polygon_receiver);
+    order_mapper_builder = order_mapper_builder.with_order_client(order_client);
+    order_mapper_builder = order_mapper_builder.with_poll_interval(Duration::from_secs(settings.poll_interval));
 
-    // Start resolvers in separate tasks
-    tokio::spawn(async move {
-        eth_resolver.run();
-    });
+    let mut resolvers = Vec::new();
+    
+    for (chain_name, chain_settings) in settings.chains {
+        let chain_id = chain_settings.chain_id;
+        let assets = chain_settings.assets;
 
-    tokio::spawn(async move {
-        polygon_resolver.run();
-    });
+        let (sender, receiver) = create_chain_channel();
 
-    // Build and configure the OrderMapper
-    let mut order_mapper = OrderMapperBuilder::new()
-        .with_order_client(order_client)
-        .add_chain_resolver("1".to_string(), eth_sender) // Ethereum
-        .add_chain_resolver("137".to_string(), polygon_sender) // Polygon
-        .add_supported_assets("1".to_string(), vec![
-            "0xA0b86a33E6441b8c4C8C1e9911b8c3e3f7b6b3b".to_string(), // Example ETH asset
-            "0xB0b86a33E6441b8c4C8C1e9911b8c3e3f7b6b3c".to_string(), // Example ETH asset
-        ])
-        .add_supported_assets("137".to_string(), vec![
-            "0x2791bca1f2de4661ed88a30c99a7a9449aa84174".to_string(), // USDC on Polygon
-            "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".to_string(), // USDC.e on Polygon
-        ])
-        .with_poll_interval(Duration::from_secs(10))
-        .build().map_err(|e| anyhow::anyhow!(e))?;
+        let resolver = Resolver::new(receiver);
+        order_mapper_builder = order_mapper_builder.add_chain_resolver(chain_id.clone(), sender);
+        order_mapper_builder = order_mapper_builder.add_supported_assets(chain_id.clone(), assets.clone());
+
+        resolvers.push(resolver);
+
+        tracing::info!("Added chain name: {} chain id: {} with assets {:?}", chain_name, chain_id, assets);
+    };
+
+
+    let mut order_mapper = order_mapper_builder.build()?;
+
+
+    for resolver in resolvers {
+        tokio::spawn(async move {
+            resolver.run();
+        });
+    }
 
     order_mapper.run().await;
 
@@ -58,6 +65,5 @@ async fn main() -> Result<()> {
     // Keep the main thread alive
     tokio::signal::ctrl_c().await?;
     tracing::info!("Shutting down...");
-
     Ok(())
 }

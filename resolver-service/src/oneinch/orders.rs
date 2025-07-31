@@ -252,7 +252,7 @@ pub struct Meta {
 }
 
 /// Cross chain order DTO
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CrossChainOrderDto {
     /// Some unique value. It is necessary to be able to create cross chain orders with the same parameters (so that they have a different hash), Lowest 160 bits of the order salt must be equal to the lowest 160 bits of the extension hash
@@ -274,7 +274,7 @@ pub struct CrossChainOrderDto {
 }
 
 /// Active orders output
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveOrdersOutput {
     /// Unique identifier of the order.

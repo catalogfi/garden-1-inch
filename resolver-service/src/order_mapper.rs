@@ -1,13 +1,15 @@
 use std::{collections::{HashMap, HashSet}, sync::mpsc::{Sender, channel}, time::Duration};
+use anyhow::Result;
+use moka::future::Cache;
 use tokio::time::sleep;
 
 use crate::oneinch::orders::{ActiveOrdersOutput, ActiveOrdersParams, OrdersClient};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct OrderAction {
     pub order_id: String,
     pub action_type: ActionType,
-    pub order_data: OrderData, // Full order context
+    pub order: ActiveOrdersOutput,
 }
 
 #[derive(Debug, Clone)]
@@ -15,19 +17,6 @@ pub enum ActionType {
     DeployEscrow,
     ReleaseFunds,
     RefundFunds,
-}
-
-// Order Mapper has two jobs 
-// 1. Map orders to actions
-// 2. Map actions to resolvers
-
-#[derive(Debug, Clone)]
-pub struct OrderData {
-    pub maker_asset: String,
-    pub taker_asset: String,
-    pub chain_id: String,
-    pub amount: String,
-    // Add other necessary fields
 }
 
 pub struct OrderMapperBuilder {
@@ -62,12 +51,6 @@ impl OrderMapperBuilder {
         self
     }
 
-    /// Add a supported asset for a specific chain
-    pub fn add_supported_asset(mut self, chain_id: String, asset: String) -> Self {
-        self.supported_assets.entry(chain_id.clone()).or_insert_with(HashSet::new).insert(asset);
-        self
-    }
-
     /// Add multiple supported assets for a specific chain
     pub fn add_supported_assets(mut self, chain_id: String, assets: Vec<String>) -> Self {
         for asset in assets {
@@ -83,18 +66,18 @@ impl OrderMapperBuilder {
     }
 
     /// Build the OrderMapper
-    pub fn build(self) -> Result<OrderMapper, String> {
-        let order_client = self.order_client.ok_or("OrderClient must be set")?;
+    pub fn build(self) -> Result<OrderMapper> {
+        let order_client = self.order_client.ok_or(anyhow::anyhow!("OrderClient must be set"))?;
         
         if self.chain_resolvers.is_empty() {
-            return Err("At least one chain resolver must be added".to_string());
+            return Err(anyhow::anyhow!("At least one chain resolver must be added"));
         }
 
         Ok(OrderMapper {
             chain_resolvers: self.chain_resolvers,
             supported_chains: self.supported_chains,
             supported_assets: self.supported_assets,
-            processing_orders: HashSet::new(),
+            processing_orders: Cache::new(1000),
             order_client,
             poll_interval: self.poll_interval,
         })
@@ -105,7 +88,7 @@ pub struct OrderMapper {
     pub chain_resolvers: HashMap<String, Sender<OrderAction>>, // Key by chain_id
     pub supported_chains: HashSet<String>,
     pub supported_assets: HashMap<String, HashSet<String>>, // chain_id -> supported assets
-    pub processing_orders: HashSet<String>, // Track orders being processed
+    pub processing_orders: Cache<String, bool>, // Track orders being processed
     pub order_client: OrdersClient,
     pub poll_interval: Duration,
 }
@@ -129,68 +112,81 @@ impl OrderMapper {
         }
     }
 
-    async fn process_orders(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn push_action(&self, order: &ActiveOrdersOutput, action_type: ActionType, resolver: &Sender<OrderAction>) -> Result<()> {
+        let action = OrderAction {
+            order_id: order.order_hash.clone(),
+            action_type,
+            order: order.clone(),
+        };
+
+        match resolver.send(action) {
+            Ok(_) => {
+                self.processing_orders.insert(order.order_hash.clone(), true).await;
+                tracing::info!("Sent order {} to resolver for chain {}", order.order_hash, order.src_chain_id);
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!("Failed to send order {} to resolver: {}", order.order_hash, e);
+                Err(anyhow::anyhow!("Failed to send order {} to resolver: {}", order.order_hash, e))
+            }
+        }
+    }
+
+    async fn process_orders(&mut self) -> Result<()> {
         let orders = self.order_client.get_active_orders(ActiveOrdersParams::new()).await?;
         
         for order in orders.items {
             let order_id = order.order_hash.clone();
             
             // Skip if already processing
-            if self.processing_orders.contains(&order_id) {
+            if self.processing_orders.get(&order_id).await.is_some() {
                 continue;
             }
 
-            // Check if we support this chain and asset
-            if let Some(chain_id) = self.extract_chain_id(&order) {
-                if self.is_supported_order(&chain_id, &order.order.taker_asset) {
-                    if let Some(resolver) = self.chain_resolvers.get(&chain_id) {
-                        let chain_id_clone = chain_id.clone();
-                        let action = OrderAction {
-                            order_id: order_id.clone(),
-                            action_type: self.determine_action(&order),
-                            order_data: OrderData {
-                                maker_asset: order.order.maker_asset,
-                                taker_asset: order.order.taker_asset,
-                                chain_id,
-                                amount: order.order.taking_amount,
-                            },
-                        };
+            // Check if we support the asset on both chains and if so push actions to both resolvers            
+            if self.is_supported_order(&order) {
+                tracing::info!("Processing order {}", order_id);
 
-                        match resolver.send(action) {
-                            Ok(_) => {
-                                self.processing_orders.insert(order_id.clone());
-                                tracing::info!("Sent order {} to resolver for chain {}", order_id, chain_id_clone);
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to send order {} to resolver: {}", order_id, e);
-                            }
-                        }
-                    }
-                }
+                let (source_action_type, destination_action_type) = self.determine_action(&order);
+
+                let source_chain_resolver = self.chain_resolvers.get(&order.src_chain_id.to_string())
+                    .ok_or(anyhow::anyhow!("Source chain resolver not found"))?;
+                
+                let destination_chain_resolver = self.chain_resolvers.get(&order.dst_chain_id.to_string())
+                    .ok_or(anyhow::anyhow!("Destination chain resolver not found"))?;
+                
+                self.push_action(&order, source_action_type, source_chain_resolver).await
+                    .map_err(|e| anyhow::anyhow!("Failed to push action to source chain resolver: {}", e))?;
+                
+                tracing::info!("Pushed action to source chain resolver for order {}", order_id);
+                
+                self.push_action(&order, destination_action_type, destination_chain_resolver).await
+                    .map_err(|e| anyhow::anyhow!("Failed to push action to destination chain resolver: {}", e))?;
+                
+                tracing::info!("Pushed action to destination chain resolver for order {}", order_id);
+                
+                self.processing_orders.insert(order_id, true).await;
             }
         }
         Ok(())
     }
 
-    fn extract_chain_id(&self, order: &ActiveOrdersOutput) -> Option<String> {
-        // Logic to determine chain from order data
-        // This depends on your order structure
-        Some("1".to_string()) // Placeholder
+    fn extract_chain_id(&self, order: &ActiveOrdersOutput) -> Option<(String, String)> {
+        Some((order.src_chain_id.to_string(), order.dst_chain_id.to_string()))
+    }  
+
+    fn is_supported_order(&self, order: &ActiveOrdersOutput) -> bool {
+        let (src_chain_id, dst_chain_id) = self.extract_chain_id(order).unwrap();
+        self.supported_chains.contains(&src_chain_id) &&
+        self.supported_chains.contains(&dst_chain_id) &&
+        self.supported_assets.get(&src_chain_id).map_or(false, |assets| assets.contains(&order.order.maker_asset)) &&
+        self.supported_assets.get(&dst_chain_id).map_or(false, |assets| assets.contains(&order.order.taker_asset))
     }
 
-    fn is_supported_order(&self, chain_id: &str, asset: &str) -> bool {
-        self.supported_chains.contains(chain_id) &&
-        self.supported_assets.get(chain_id).map_or(false, |assets| assets.contains(asset))
-    }
-
-    fn determine_action(&self, order: &ActiveOrdersOutput) -> ActionType {
-        // Logic to determine what action this order needs
+    fn determine_action(&self, order: &ActiveOrdersOutput) -> (ActionType, ActionType) {
+        // TODO: Add logic to determine what action this order needs
         // Based on order status, type, etc.
-        ActionType::DeployEscrow // Placeholder
-    }
-
-    pub fn mark_order_completed(&mut self, order_id: &str) {
-        self.processing_orders.remove(order_id);
+        (ActionType::DeployEscrow, ActionType::DeployEscrow)
     }
 }
 

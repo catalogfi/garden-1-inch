@@ -1,6 +1,6 @@
 use std::sync::mpsc::Receiver;
 
-use crate::order_mapper::{OrderAction, OrderData, ActionType};
+use crate::order_mapper::{OrderAction, ActionType};
 
 pub struct ResolverContract {
     address: String,
@@ -59,19 +59,19 @@ impl Resolver {
 
     fn deploy_escrow(&self, order_action: &OrderAction) {
         println!("Deploying escrow for order: {}", order_action.order_id);
-        println!("Order data: {:?}", order_action.order_data);
+        println!("Order data: {:?}", order_action.order);
         // Implementation for deploying escrow
     }
 
     fn release_funds(&self, order_action: &OrderAction) {
         println!("Releasing funds for order: {}", order_action.order_id);
-        println!("Order data: {:?}", order_action.order_data);
+        println!("Order data: {:?}", order_action.order);
         // Implementation for releasing funds
     }
 
     fn refund_funds(&self, order_action: &OrderAction) {
         println!("Refunding funds for order: {}", order_action.order_id);
-        println!("Order data: {:?}", order_action.order_data);
+        println!("Order data: {:?}", order_action.order);
         // Implementation for refunding funds
     }
 }
