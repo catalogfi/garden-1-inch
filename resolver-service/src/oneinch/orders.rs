@@ -290,10 +290,16 @@ pub enum OrderStatus {
     SourceSettled,
     #[serde(rename = "destination_settled")]
     DestinationSettled,
+    #[serde(rename = "source_refunded")]
+    SourceRefunded,
+    #[serde(rename = "destination_refunded")]
+    DestinationRefunded,
+    #[serde(rename = "source_canceled")]
+    SourceCanceled,
+    #[serde(rename = "destination_canceled")]
+    DestinationCanceled,
     #[serde(rename = "expired")]
     Expired,
-    #[serde(rename = "refunded")]
-    Refunded,
 }
 
 /// Active orders output
