@@ -30,8 +30,7 @@ impl OrdersClient {
             .await?;
 
         if response.status().is_success() {
-            // println!("response: {:?}", response.text().await?);
-            let orders: GetActiveOrdersOutput = response.json().await.unwrap();
+            let orders: GetActiveOrdersOutput = response.json().await?;
             Ok(orders)
         } else {
             Err(anyhow::anyhow!("Failed to get active orders: {}", response.status()))

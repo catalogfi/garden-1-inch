@@ -27,8 +27,10 @@ async fn main() -> Result<()> {
 
     let mut order_mapper_builder = OrderMapper::builder();
 
-    order_mapper_builder = order_mapper_builder.with_order_client(order_client);
-    order_mapper_builder = order_mapper_builder.with_poll_interval(Duration::from_secs(settings.poll_interval));
+    order_mapper_builder = order_mapper_builder
+        .with_order_client(order_client)
+        .with_poll_interval(Duration::from_secs(settings.poll_interval))
+        .with_action_ttl(Duration::from_secs(300)); // 5 minutes TTL for action reprocessing
     
     for (chain_name, chain_settings) in settings.chains {
         let chain_id = chain_settings.chain_id.clone();

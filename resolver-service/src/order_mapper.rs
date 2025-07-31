@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, time::Duration};
+use std::{collections::{HashMap, HashSet}, time::{Duration, SystemTime}};
 use anyhow::Result;
 use moka::future::Cache;
 use tokio::time::sleep;
@@ -13,7 +13,7 @@ pub struct OrderAction {
     pub order: ActiveOrdersOutput,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ActionType {
     DeployEscrow,
     ReleaseFunds,
@@ -27,6 +27,7 @@ pub struct OrderMapperBuilder {
     supported_chains: HashSet<String>,
     supported_assets: HashMap<String, HashSet<String>>,
     poll_interval: Duration,
+    action_ttl: Duration,
 }
 
 impl OrderMapperBuilder {
@@ -37,6 +38,7 @@ impl OrderMapperBuilder {
             supported_chains: HashSet::new(),
             supported_assets: HashMap::new(),
             poll_interval: Duration::from_secs(5),
+            action_ttl: Duration::from_secs(300), // Default 5 minutes TTL
         }
     }
 
@@ -67,6 +69,12 @@ impl OrderMapperBuilder {
         self
     }
 
+    /// Set the action TTL for reprocessing
+    pub fn with_action_ttl(mut self, action_ttl: Duration) -> Self {
+        self.action_ttl = action_ttl;
+        self
+    }
+
     /// Build the OrderMapper
     pub fn build(self) -> Result<OrderMapper> {
         let order_client = self.order_client.ok_or(anyhow::anyhow!("OrderClient must be set"))?;
@@ -82,6 +90,7 @@ impl OrderMapperBuilder {
             processing_orders: Cache::new(1000),
             order_client,
             poll_interval: self.poll_interval,
+            action_ttl: self.action_ttl,
         })
     }
 }
@@ -90,9 +99,10 @@ pub struct OrderMapper {
     pub chain_resolvers: HashMap<String, Box<dyn Resolver + Send + Sync>>, // Key by chain_id
     pub supported_chains: HashSet<String>,
     pub supported_assets: HashMap<String, HashSet<String>>, // chain_id -> supported assets
-    pub processing_orders: Cache<String, bool>, // Track orders being processed
+    pub processing_orders: Cache<String, (ActionType, SystemTime)>, // Track last processed action and timestamp
     pub order_client: OrdersClient,
     pub poll_interval: Duration,
+    pub action_ttl: Duration, // TTL for action reprocessing
 }
 
 impl OrderMapper {
@@ -107,6 +117,7 @@ impl OrderMapper {
         }
         
         loop {
+            tracing::info!("Processing orders");
             if let Err(e) = self.process_orders().await {
                 tracing::error!("Error processing orders: {}", e);
             }
@@ -141,23 +152,56 @@ impl OrderMapper {
         }
     }
 
+    async fn should_process_action(&self, order_id: &str, action_type: &ActionType) -> Result<bool> {
+        if let Some((last_action, timestamp)) = self.processing_orders.get(order_id).await {
+            let time_since_last = SystemTime::now().duration_since(timestamp)?;
+            
+            // If same action and within TTL window, skip
+            if last_action == *action_type && time_since_last < self.action_ttl {
+                tracing::debug!(
+                    order_id=?order_id, 
+                    action_type=?action_type, 
+                    time_since_last=?time_since_last,
+                    "Skipping already processed action within TTL"
+                );
+                return Ok(false);
+            }
+            
+            // If different action, always process (status change)
+            if last_action != *action_type {
+                tracing::info!(
+                    order_id=?order_id, 
+                    last_action=?last_action,
+                    new_action=?action_type,
+                    "Processing new action type for order"
+                );
+            }
+        }
+        
+        Ok(true)
+    }
+
     async fn process_orders(&mut self) -> Result<()> {
         let orders = self.order_client.get_active_orders(ActiveOrdersParams::new()).await?;
+        tracing::info!("Processing {} orders", orders.items.len());
         
         for order in orders.items {
             let order_id = order.order_hash.clone();
             
-            // Skip if already processing
-            if self.processing_orders.get(&order_id).await.is_some() {
-                tracing::debug!(order_id=?order_id, "Order already being processed, skipping");
-                continue;
-            }
-
             // Check if we support the asset on both chains
             if self.is_supported_order(&order) {
                 tracing::info!(order_id=?order_id, "Processing supported order");
 
                 let (source_action_type, destination_action_type) = self.determine_action(&order);
+
+                // Check if we should process source action
+                let should_process_source = self.should_process_action(&order_id, &source_action_type).await?;
+                let should_process_dest = self.should_process_action(&order_id, &destination_action_type).await?;
+
+                if !should_process_source && !should_process_dest {
+                    tracing::debug!(order_id=?order_id, "Skipping order - no new actions to process");
+                    continue;
+                }
 
                 // Get resolvers with better error handling
                 let source_chain_resolver = self.chain_resolvers.get(&order.src_chain_id.to_string())
@@ -166,30 +210,33 @@ impl OrderMapper {
                 let destination_chain_resolver = self.chain_resolvers.get(&order.dst_chain_id.to_string())
                     .ok_or_else(|| anyhow::anyhow!("Destination chain resolver not found for chain {}", order.dst_chain_id))?;
                 
-                // Mark as processing before executing actions
-                self.processing_orders.insert(order_id.clone(), true).await;
-                
-                // Execute source chain action
-                match self.execute_action(&order, source_action_type, source_chain_resolver).await {
-                    Ok(_) => {
-                        tracing::info!(order_id=?order_id, src_chain_id=?order.src_chain_id, "Executed action on source chain resolver");
-                    }
-                    Err(e) => {
-                        // Remove from processing if failed
-                        self.processing_orders.invalidate(&order_id).await;
-                        return Err(anyhow::anyhow!("Failed to execute action on source chain resolver: {}", e));
+                // Process source action if needed
+                if should_process_source {
+                    match self.execute_action(&order, source_action_type.clone(), source_chain_resolver).await {
+                        Ok(_) => {
+                            tracing::info!(order_id=?order_id, src_chain_id=?order.src_chain_id, "Executed action on source chain resolver");
+                            // Cache the processed action
+                            self.processing_orders.insert(order_id.clone(), (source_action_type.clone(), SystemTime::now())).await;
+                        }
+                        Err(e) => {
+                            tracing::error!(order_id=?order_id, error=?e, "Failed to execute action on source chain resolver");
+                            return Err(anyhow::anyhow!("Failed to execute action on source chain resolver: {}", e));
+                        }
                     }
                 }
                 
-                // Execute destination chain action
-                match self.execute_action(&order, destination_action_type, destination_chain_resolver).await {
-                    Ok(_) => {
-                        tracing::info!(order_id=?order_id, dst_chain_id=?order.dst_chain_id, "Executed action on destination chain resolver");
-                    }
-                    Err(e) => {
-                        // Remove from processing if failed
-                        self.processing_orders.invalidate(&order_id).await;
-                        return Err(anyhow::anyhow!("Failed to execute action on destination chain resolver: {}", e));
+                // Process destination action if needed
+                if should_process_dest {
+                    match self.execute_action(&order, destination_action_type.clone(), destination_chain_resolver).await {
+                        Ok(_) => {
+                            tracing::info!(order_id=?order_id, dst_chain_id=?order.dst_chain_id, "Executed action on destination chain resolver");
+                            // Cache the processed action (use destination action for caching)
+                            self.processing_orders.insert(order_id.clone(), (destination_action_type.clone(), SystemTime::now())).await;
+                        }
+                        Err(e) => {
+                            tracing::error!(order_id=?order_id, error=?e, "Failed to execute action on destination chain resolver");
+                            return Err(anyhow::anyhow!("Failed to execute action on destination chain resolver: {}", e));
+                        }
                     }
                 }
             } else {
@@ -199,16 +246,11 @@ impl OrderMapper {
         Ok(())
     }
 
-    fn extract_chain_id(&self, order: &ActiveOrdersOutput) -> Option<(String, String)> {
-        Some((order.src_chain_id.to_string(), order.dst_chain_id.to_string()))
-    }  
-
     fn is_supported_order(&self, order: &ActiveOrdersOutput) -> bool {
-        let (src_chain_id, dst_chain_id) = self.extract_chain_id(order).unwrap();
-        self.supported_chains.contains(&src_chain_id) &&
-        self.supported_chains.contains(&dst_chain_id) &&
-        self.supported_assets.get(&src_chain_id).map_or(false, |assets| assets.contains(&order.maker_asset)) &&
-        self.supported_assets.get(&dst_chain_id).map_or(false, |assets| assets.contains(&order.taker_asset))
+        self.supported_chains.contains(&order.src_chain_id.to_string()) &&
+        self.supported_chains.contains(&order.dst_chain_id.to_string()) &&
+        self.supported_assets.get(&order.src_chain_id.to_string()).map_or(false, |assets| assets.contains(&order.maker_asset)) &&
+        self.supported_assets.get(&order.dst_chain_id.to_string()).map_or(false, |assets| assets.contains(&order.taker_asset))
     }
 
     fn determine_action(&self, order: &ActiveOrdersOutput) -> (ActionType, ActionType) {
