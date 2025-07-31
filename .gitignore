@@ -137,3 +137,9 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Rust build artifacts and unwanted files
+/target/
+**/*.rs.bk
+*.pdb
+relayer/target/
