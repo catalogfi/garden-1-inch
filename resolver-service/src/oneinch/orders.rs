@@ -277,38 +277,64 @@ pub struct CrossChainOrderDto {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveOrdersOutput {
+    /// Unique identifier
+    pub id: String,
     /// Unique identifier of the order.
     pub order_hash: String,
-    /// Signature of the order.
-    pub signature: String,
-    /// Deadline by which the order must be filled.
-    pub deadline: u64,
-    /// Start date of the auction for this order.
-    pub auction_start_date: u64,
-    /// End date of the auction for this order.
-    pub auction_end_date: u64,
     /// Identifier of the quote associated with this order.
     pub quote_id: String,
-    /// Remaining amount of the maker asset that can still be filled.
-    pub remaining_maker_amount: String,
-    /// Amount of the maker asset balance.
-    pub maker_balance: String,
-    /// Amount of the maker asset allowance.
-    pub maker_allowance: String,
-    /// True if order signed by contract (GnosisSafe, etc.)
-    pub is_maker_contract: bool,
-    /// An interaction call data. ABI encoded set of makerAssetSuffix, takerAssetSuffix, makingAmountGetter, takingAmountGetter, predicate, permit, preInteraction, postInteraction.If extension exists then lowest 160 bits of the order salt must be equal to the lowest 160 bits of the extension hash
-    pub extension: String,
     /// Identifier of the chain where the maker asset is located.
     pub src_chain_id: u64,
     /// Identifier of the chain where the taker asset is located.
     pub dst_chain_id: u64,
-    /// Detailed structure of the limit order according to the FusionOrderV4 specification.
-    pub order: CrossChainOrderDto,
+    /// Address of the account creating the order (maker) in src chain.
+    pub maker: String,
+    /// Address of the account receiving the assets (receiver), if different from maker in dst chain.
+    pub receiver: String,
+    /// Identifier of the asset being offered by the maker in src chain.
+    pub maker_asset: String,
+    /// Identifier of the asset being requested by the maker in exchange in dst chain.
+    pub taker_asset: String,
+    /// Amount of the makerAsset being offered by the maker in src chain.
+    pub making_amount: String,
+    /// Amount of the takerAsset being requested by the maker in dst chain.
+    pub taking_amount: String,
+    /// Some unique value. It is necessary to be able to create cross chain orders with the same parameters
+    pub salt: String,
+    /// Includes some flags like, allow multiple fills, is partial fill allowed or not, price improvement, nonce, deadline etc.
+    pub maker_traits: String,
+    /// Signature of the order.
+    pub signature: String,
+    /// An interaction call data. ABI encoded set of makerAssetSuffix, takerAssetSuffix, makingAmountGetter, takingAmountGetter, predicate, permit, preInteraction, postInteraction
+    pub extension: String,
     /// Array of secret hashes.
     pub secret_hashes: Vec<Vec<String>>,
-    /// Array of fills.
-    pub fills: Vec<String>,
+    /// Array of secrets.
+    pub secrets: Vec<String>,
+    /// Order status
+    pub status: String,
+    /// Deadline by which the order must be filled.
+    pub deadline: u64,
+    /// Start date of the auction for this order.
+    pub auction_start_date: Option<u64>,
+    /// End date of the auction for this order.
+    pub auction_end_date: Option<u64>,
+    /// Source escrow address
+    pub src_escrow_address: Option<String>,
+    /// Destination escrow address
+    pub dst_escrow_address: Option<String>,
+    /// Source transaction hash
+    pub src_tx_hash: Option<String>,
+    /// Destination transaction hash
+    pub dst_tx_hash: Option<String>,
+    /// Amount of the makerAsset filled in src chain.
+    pub filled_maker_amount: String,
+    /// Amount of the takerAsset filled in dst chain.
+    pub filled_taker_amount: String,
+    /// Creation timestamp
+    pub created_at: String,
+    /// Last update timestamp
+    pub updated_at: String,
 }
 
 /// Get active orders output

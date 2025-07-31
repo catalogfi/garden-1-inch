@@ -17,6 +17,7 @@ pub enum ActionType {
     DeployEscrow,
     ReleaseFunds,
     RefundFunds,
+    NoOp,
 }
 
 pub struct OrderMapperBuilder {
@@ -179,14 +180,16 @@ impl OrderMapper {
         let (src_chain_id, dst_chain_id) = self.extract_chain_id(order).unwrap();
         self.supported_chains.contains(&src_chain_id) &&
         self.supported_chains.contains(&dst_chain_id) &&
-        self.supported_assets.get(&src_chain_id).map_or(false, |assets| assets.contains(&order.order.maker_asset)) &&
-        self.supported_assets.get(&dst_chain_id).map_or(false, |assets| assets.contains(&order.order.taker_asset))
+        self.supported_assets.get(&src_chain_id).map_or(false, |assets| assets.contains(&order.maker_asset)) &&
+        self.supported_assets.get(&dst_chain_id).map_or(false, |assets| assets.contains(&order.taker_asset))
     }
 
     fn determine_action(&self, order: &ActiveOrdersOutput) -> (ActionType, ActionType) {
-        // TODO: Add logic to determine what action this order needs
-        // Based on order status, type, etc.
-        (ActionType::DeployEscrow, ActionType::DeployEscrow)
+        if order.status == "active" {
+            (ActionType::DeployEscrow, ActionType::DeployEscrow)
+        } else {
+            (ActionType::NoOp, ActionType::NoOp)
+        }
     }
 }
 
