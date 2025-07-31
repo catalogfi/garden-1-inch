@@ -22,7 +22,6 @@ impl OrdersClient {
     /// Get cross chain swap active orders
     pub async fn get_active_orders(&self, params: ActiveOrdersParams) -> Result<GetActiveOrdersOutput> {
         let url = format!("{}/orders/v1.0/order/active", self.base_url);
-        println!("url: {}", url);
         let response = self.client
             .get(&url)
             .query(&params)
@@ -48,7 +47,7 @@ impl OrdersClient {
             request = request.query(&[("chainId", chain_id.to_string())]);
         }
         
-        let response = request.send().await?;
+        let response = request.header("Authorization", format!("Bearer {}", self.api_key)).send().await?;
 
         if response.status().is_success() {
             let escrow: EscrowFactory = response.json().await?;
@@ -65,6 +64,7 @@ impl OrdersClient {
         let response = self.client
             .get(&url)
             .query(&params)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -82,6 +82,7 @@ impl OrdersClient {
         
         let response = self.client
             .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -99,6 +100,7 @@ impl OrdersClient {
         
         let response = self.client
             .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -116,6 +118,7 @@ impl OrdersClient {
         
         let response = self.client
             .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -133,6 +136,7 @@ impl OrdersClient {
         
         let response = self.client
             .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -147,12 +151,12 @@ impl OrdersClient {
     /// Get order by hash
     pub async fn get_order_by_order_hash(&self, order_hash: String) -> Result<GetOrderFillsByHashOutput> {
         let url = format!("{}/orders/v1.0/order/status/{}", self.base_url, order_hash);
-        
+        println!("url: {}", url);
         let response = self.client
             .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
-
         if response.status().is_success() {
             let order: GetOrderFillsByHashOutput = response.json().await?;
             Ok(order)
@@ -170,6 +174,7 @@ impl OrdersClient {
         let response = self.client
             .post(&url)
             .json(&body)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -518,7 +523,7 @@ pub struct GetOrderFillsByHashOutput {
     pub order: LimitOrderV4StructOutput,
     /// An interaction call data. ABI encoded set of makerAssetSuffix, takerAssetSuffix, makingAmountGetter, takingAmountGetter, predicate, permit, preInteraction, postInteraction.If extension exists then lowest 160 bits of the order salt must be equal to the lowest 160 bits of the extension hash
     pub extension: String,
-    pub points: Option<AuctionPointOutput>,
+    pub points: Option<Vec<AuctionPointOutput>>,
     /// Approximate amount of the takerAsset being requested by the maker in dst chain.
     pub approximate_taking_amount: String,
     /// shows if user received more than expected
