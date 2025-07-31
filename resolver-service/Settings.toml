@@ -1,0 +1,20 @@
+orders_url = "https://api.1inch.dev/fusion-plus"
+poll_interval = 5
+
+[chains.eth]
+chain_id = "1"
+resolver_contract_address = ""
+provider = ""
+assets = ["ETH", "USDC", "DAI"]
+
+[chains.bsc]
+chain_id = "56"
+resolver_contract_address = ""
+provider = ""
+assets = ["BNB", "BUSD", "USDT"]
+
+[chains.polygon]
+chain_id = "137"
+resolver_contract_address = ""
+provider = ""
+assets = ["MATIC", "USDC", "DAI"]

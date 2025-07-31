@@ -1,49 +1,62 @@
-use std::sync::mpsc::Receiver;
+use tokio::sync::mpsc::Receiver;
 
 use crate::order_mapper::{OrderAction, ActionType};
 
 pub struct ResolverContract {
     address: String,
     abi: String,
+    provider: String,
 }
 
 impl ResolverContract {
-    pub fn new() -> Self {
+    pub fn new(address: String, abi: String, provider: String) -> Self {
         Self {
-            address: String::new(),
-            abi: String::new(),
+            address,
+            abi,
+            provider,
         }
     }
 }
 
 pub struct Resolver {
     receiver: Receiver<OrderAction>,
-    contract: ResolverContract
+    contract: ResolverContract,
+    chain_id: String,  
 }
 
 impl Resolver {
-    pub fn new(receiver: Receiver<OrderAction>) -> Self {
+    pub fn new(receiver: Receiver<OrderAction>, chain_id: String, resolver_contract_address: String, provider: String) -> Self {
+        let contract = ResolverContract::new(resolver_contract_address, "".to_string(), provider);
         Self {
             receiver,
-            contract: ResolverContract::new(),
+            contract,
+            chain_id,
         }
     }
 
-    pub async fn run(&self) {
+    pub async fn run(&mut self) {
+        tracing::info!(chain_id=?self.chain_id, "Resolver started");
         loop {
-            match self.receiver.recv() {
-                Ok(order_action) => {
+            match self.receiver.recv().await {
+                Some(order_action) => {
                     self.process_order_action(order_action).await;
                 }
-                Err(e) => {
-                    println!("Error receiving order action: {}", e);
-                    continue;
+                None => {
+                    tracing::info!(chain_id=?self.chain_id, "Resolver channel closed, stopping");
+                    break;
                 }
             }
         }
     }
 
     async fn process_order_action(&self, order_action: OrderAction) {
+        tracing::info!(
+            chain_id=?self.chain_id,
+            order_id=?order_action.order_id,
+            action_type=?order_action.action_type,
+            "Processing order action"
+        );
+        
         match order_action.action_type {
             ActionType::DeployEscrow => {
                 self.deploy_escrow(&order_action).await;
@@ -55,26 +68,39 @@ impl Resolver {
                 self.refund_funds(&order_action).await;
             }
             ActionType::NoOp => {
-                tracing::info!("No action needed for order: {}", order_action.order_id);
+                tracing::info!(
+                    chain_id=?self.chain_id,
+                    order_id=?order_action.order_id,
+                    "No action needed for order"
+                );
             }
         }
     }
 
     async fn deploy_escrow(&self, order_action: &OrderAction) {
-        tracing::info!("Deploying escrow for order: {}", order_action.order_id);
-        tracing::info!("Order data: {:?}", order_action.order);
+        tracing::info!(
+            chain_id=?self.chain_id,
+            order_id=?order_action.order_id,
+            "Deploying escrow"
+        );
         // Implementation for deploying escrow
     }
 
     async fn release_funds(&self, order_action: &OrderAction) {
-        tracing::info!("Releasing funds for order: {}", order_action.order_id);
-        tracing::info!("Order data: {:?}", order_action.order);
+        tracing::info!(
+            chain_id=?self.chain_id,
+            order_id=?order_action.order_id,
+            "Releasing funds"
+        );
         // Implementation for releasing funds
     }
 
     async fn refund_funds(&self, order_action: &OrderAction) {
-        tracing::info!("Refunding funds for order: {}", order_action.order_id);
-        tracing::info!("Order data: {:?}", order_action.order);
+        tracing::info!(
+            chain_id=?self.chain_id,
+            order_id=?order_action.order_id,
+            "Refunding funds"
+        );
         // Implementation for refunding funds
     }
 }

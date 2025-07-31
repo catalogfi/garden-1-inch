@@ -12,7 +12,7 @@ mod resolver;
 mod settings;
 mod order_mapper;
 
-const SETTINGS_PATH: &str = "settings.toml";
+const SETTINGS_PATH: &str = "Settings.toml";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -39,31 +39,51 @@ async fn main() -> Result<()> {
 
         let (sender, receiver) = create_chain_channel();
 
-        let resolver = Resolver::new(receiver);
+        let resolver = Resolver::new(receiver, chain_id.clone(), chain_settings.resolver_contract_address.clone(), chain_settings.provider.clone());
         order_mapper_builder = order_mapper_builder.add_chain_resolver(chain_id.clone(), sender);
         order_mapper_builder = order_mapper_builder.add_supported_assets(chain_id.clone(), assets.clone());
 
         resolvers.push(resolver);
 
-        tracing::info!("Added chain name: {} chain id: {} with assets {:?}", chain_name, chain_id, assets);
+        tracing::info!(chain_name=?chain_name, chain_id = chain_id, assets = ?assets, "Added chain");
     };
 
 
     let mut order_mapper = order_mapper_builder.build()?;
 
 
-    for resolver in resolvers {
-        tokio::spawn(async move {
-            resolver.run();
-        });
-    }
+    // Start resolvers in background tasks
+    let resolver_handles = run_resolvers(resolvers);
 
+    // Run order mapper in the main task
     order_mapper.run().await;
 
-    tracing::info!("OrderMapper started successfully!");
+    // Wait for resolvers to complete
+    wait_for_resolvers(resolver_handles).await;
 
     // Keep the main thread alive
     tokio::signal::ctrl_c().await?;
     tracing::info!("Shutting down...");
     Ok(())
+}
+
+
+/// Runs all executors concurrently
+fn run_resolvers(resolvers: Vec<Resolver>) -> Vec<tokio::task::JoinHandle<()>> {
+    resolvers
+        .into_iter()
+        .map(|mut resolver| {
+            tokio::spawn(async move {
+                resolver.run().await;
+            })
+        })
+        .collect()
+}
+
+async fn wait_for_resolvers(handles: Vec<tokio::task::JoinHandle<()>>) {
+    for handle in handles {
+        if let Err(e) = handle.await {
+            tracing::error!("Resolver task failed: {}", e);
+        }
+    }
 }

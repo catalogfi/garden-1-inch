@@ -14,6 +14,8 @@ pub struct Settings {
 pub struct ChainSettings {
     pub chain_id: String,
     pub assets: Vec<String>,
+    pub resolver_contract_address: String,
+    pub provider: String,
 }
 
 

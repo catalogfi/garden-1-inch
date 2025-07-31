@@ -1,9 +1,9 @@
-use std::{collections::{HashMap, HashSet}, sync::mpsc::{Sender, channel}, time::Duration};
+use std::{collections::{HashMap, HashSet}, time::Duration};
 use anyhow::Result;
 use moka::future::Cache;
-use tokio::time::sleep;
+use tokio::{sync::mpsc::{self, Receiver, Sender}, time::sleep};
 
-use crate::oneinch::orders::{ActiveOrdersOutput, ActiveOrdersParams, OrdersClient};
+use crate::oneinch::orders::{ActiveOrdersOutput, ActiveOrdersParams, OrderStatus, OrdersClient};
 
 #[derive(Debug)]
 pub struct OrderAction {
@@ -102,7 +102,7 @@ impl OrderMapper {
     pub async fn run(&mut self) {
         tracing::info!("OrderMapper started with {} supported chains", self.supported_chains.len());
         for (chain_id, assets) in &self.supported_assets {
-            tracing::info!("Chain {} supports {} assets", chain_id, assets.len());
+            tracing::info!(chain_id=?chain_id, assets_count=assets.len(), "Chain supports assets");
         }
         
         loop {
@@ -120,14 +120,13 @@ impl OrderMapper {
             order: order.clone(),
         };
 
-        match resolver.send(action) {
+        match resolver.send(action).await {
             Ok(_) => {
-                self.processing_orders.insert(order.order_hash.clone(), true).await;
-                tracing::info!("Sent order {} to resolver for chain {}", order.order_hash, order.src_chain_id);
+                tracing::debug!(order_id=?order.order_hash, "Successfully sent action to resolver");
                 Ok(())
             }
             Err(e) => {
-                tracing::error!("Failed to send order {} to resolver: {}", order.order_hash, e);
+                tracing::error!(order_id=?order.order_hash, error=?e, "Failed to send action to resolver");
                 Err(anyhow::anyhow!("Failed to send order {} to resolver: {}", order.order_hash, e))
             }
         }
@@ -139,34 +138,53 @@ impl OrderMapper {
         for order in orders.items {
             let order_id = order.order_hash.clone();
             
-            // Skip if already processing
+            // Skip if already processing - use atomic check and insert
             if self.processing_orders.get(&order_id).await.is_some() {
+                tracing::debug!(order_id=?order_id, "Order already being processed, skipping");
                 continue;
             }
 
             // Check if we support the asset on both chains and if so push actions to both resolvers            
             if self.is_supported_order(&order) {
-                tracing::info!("Processing order {}", order_id);
+                tracing::info!(order_id=?order_id, "Processing supported order");
 
                 let (source_action_type, destination_action_type) = self.determine_action(&order);
 
+                // Get resolvers with better error handling
                 let source_chain_resolver = self.chain_resolvers.get(&order.src_chain_id.to_string())
-                    .ok_or(anyhow::anyhow!("Source chain resolver not found"))?;
+                    .ok_or_else(|| anyhow::anyhow!("Source chain resolver not found for chain {}", order.src_chain_id))?;
                 
                 let destination_chain_resolver = self.chain_resolvers.get(&order.dst_chain_id.to_string())
-                    .ok_or(anyhow::anyhow!("Destination chain resolver not found"))?;
+                    .ok_or_else(|| anyhow::anyhow!("Destination chain resolver not found for chain {}", order.dst_chain_id))?;
                 
-                self.push_action(&order, source_action_type, source_chain_resolver).await
-                    .map_err(|e| anyhow::anyhow!("Failed to push action to source chain resolver: {}", e))?;
+                // Mark as processing before sending to prevent race conditions
+                self.processing_orders.insert(order_id.clone(), true).await;
                 
-                tracing::info!("Pushed action to source chain resolver for order {}", order_id);
+                // Send to source chain resolver
+                match self.push_action(&order, source_action_type, source_chain_resolver).await {
+                    Ok(_) => {
+                        tracing::info!(order_id=?order_id, src_chain_id=?order.src_chain_id, "Pushed action to source chain resolver");
+                    }
+                    Err(e) => {
+                        // Remove from processing if failed
+                        self.processing_orders.invalidate(&order_id).await;
+                        return Err(anyhow::anyhow!("Failed to push action to source chain resolver: {}", e));
+                    }
+                }
                 
-                self.push_action(&order, destination_action_type, destination_chain_resolver).await
-                    .map_err(|e| anyhow::anyhow!("Failed to push action to destination chain resolver: {}", e))?;
-                
-                tracing::info!("Pushed action to destination chain resolver for order {}", order_id);
-                
-                self.processing_orders.insert(order_id, true).await;
+                // Send to destination chain resolver
+                match self.push_action(&order, destination_action_type, destination_chain_resolver).await {
+                    Ok(_) => {
+                        tracing::info!(order_id=?order_id, dst_chain_id=?order.dst_chain_id, "Pushed action to destination chain resolver");
+                    }
+                    Err(e) => {
+                        // Remove from processing if failed
+                        self.processing_orders.invalidate(&order_id).await;
+                        return Err(anyhow::anyhow!("Failed to push action to destination chain resolver: {}", e));
+                    }
+                }
+            } else {
+                tracing::debug!(order_id=?order_id, "Order not supported, skipping");
             }
         }
         Ok(())
@@ -185,15 +203,21 @@ impl OrderMapper {
     }
 
     fn determine_action(&self, order: &ActiveOrdersOutput) -> (ActionType, ActionType) {
-        if order.status == "active" {
-            (ActionType::DeployEscrow, ActionType::DeployEscrow)
-        } else {
-            (ActionType::NoOp, ActionType::NoOp)
+        match order.status {
+            OrderStatus::Unmatched => (ActionType::DeployEscrow, ActionType::NoOp),
+            OrderStatus::SourceFilled => (ActionType::NoOp, ActionType::DeployEscrow),
+            OrderStatus::DestinationFilled => (ActionType::ReleaseFunds, ActionType::NoOp),
+            OrderStatus::SourceWithdrawPending => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::DestinationWithdrawPending => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::SourceSettled => (ActionType::NoOp, ActionType::RefundFunds),
+            OrderStatus::DestinationSettled => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::Expired => (ActionType::RefundFunds, ActionType::RefundFunds),
+            OrderStatus::Refunded => (ActionType::NoOp, ActionType::NoOp),
         }
     }
 }
 
 // Helper function to create a channel for a chain
-pub fn create_chain_channel() -> (Sender<OrderAction>, std::sync::mpsc::Receiver<OrderAction>) {
-    channel()
+pub fn create_chain_channel() -> (Sender<OrderAction>, Receiver<OrderAction>) {
+    mpsc::channel(100)
 }

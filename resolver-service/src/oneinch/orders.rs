@@ -273,6 +273,29 @@ pub struct CrossChainOrderDto {
     pub maker_traits: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum OrderStatus {
+    #[serde(rename = "unmatched")]
+    Unmatched,
+    #[serde(rename = "source_filled")]
+    SourceFilled,
+    #[serde(rename = "destination_filled")]
+    DestinationFilled,
+    #[serde(rename = "source_withdraw_pending")]
+    SourceWithdrawPending,
+    #[serde(rename = "destination_withdraw_pending")]
+    DestinationWithdrawPending,
+    #[serde(rename = "source_settled")]
+    SourceSettled,
+    #[serde(rename = "destination_settled")]
+    DestinationSettled,
+    #[serde(rename = "expired")]
+    Expired,
+    #[serde(rename = "refunded")]
+    Refunded,
+}
+
 /// Active orders output
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -312,7 +335,7 @@ pub struct ActiveOrdersOutput {
     /// Array of secrets.
     pub secrets: Vec<String>,
     /// Order status
-    pub status: String,
+    pub status: OrderStatus,
     /// Deadline by which the order must be filled.
     pub deadline: u64,
     /// Start date of the auction for this order.
@@ -542,7 +565,7 @@ pub struct GetOrderFillsByHashOutput {
     /// Order hash
     pub order_hash: String,
     /// Order status
-    pub status: String,
+    pub status: OrderStatus,
     /// Order validation status
     pub validation: String,
     /// Order data
