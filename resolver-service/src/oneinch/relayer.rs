@@ -6,14 +6,16 @@ use reqwest::Client;
 pub struct RelayerClient {
     client: Client,
     base_url: String,
+    api_key: String,
 }
 
 impl RelayerClient {
     /// Create a new relayer client
-    pub fn new(base_url: String) -> Self {
+    pub fn new(base_url: String, api_key: String) -> Self {
         Self {
             client: Client::new(),
             base_url,
+            api_key,
         }
     }
 
@@ -24,6 +26,7 @@ impl RelayerClient {
         let response = self.client
             .post(&url)
             .json(&order)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -41,6 +44,7 @@ impl RelayerClient {
         let response = self.client
             .post(&url)
             .json(&order_hashes)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -58,6 +62,7 @@ impl RelayerClient {
         let response = self.client
             .post(&url)
             .json(&secret)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -71,6 +76,7 @@ impl RelayerClient {
 
 /// Order input data structure
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OrderInput {
     /// Order salt
     pub salt: String,
@@ -102,6 +108,7 @@ fn default_maker_traits() -> String {
 
 /// Signed order input for submission
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SignedOrderInput {
     /// Cross chain order data
     pub order: OrderInput,
@@ -120,6 +127,7 @@ pub struct SignedOrderInput {
 
 /// Secret input for order fill
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SecretInput {
     /// A secret for the fill hashlock
     pub secret: String,

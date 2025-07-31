@@ -6,29 +6,33 @@ use reqwest::Client;
 pub struct OrdersClient {
     client: Client,
     base_url: String,
+    api_key: String,
 }
 
 impl OrdersClient {
     /// Create a new orders client
-    pub fn new(base_url: String) -> Self {
+    pub fn new(base_url: String, api_key: String) -> Self {
         Self {
             client: Client::new(),
             base_url,
+            api_key,
         }
     }
 
     /// Get cross chain swap active orders
     pub async fn get_active_orders(&self, params: ActiveOrdersParams) -> Result<GetActiveOrdersOutput> {
         let url = format!("{}/orders/v1.0/order/active", self.base_url);
-        
+        println!("url: {}", url);
         let response = self.client
             .get(&url)
             .query(&params)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
         if response.status().is_success() {
-            let orders: GetActiveOrdersOutput = response.json().await?;
+            // println!("response: {:?}", response.text().await?);
+            let orders: GetActiveOrdersOutput = response.json().await.unwrap();
             Ok(orders)
         } else {
             Err(anyhow::anyhow!("Failed to get active orders: {}", response.status()))
@@ -180,6 +184,7 @@ impl OrdersClient {
 
 /// Parameters for getting active orders
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ActiveOrdersParams {
     /// Pagination step, default: 1 (page = offset / limit)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -197,6 +202,7 @@ pub struct ActiveOrdersParams {
 
 /// Parameters for getting orders by maker
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OrdersByMakerParams {
     /// Pagination step, default: 1 (page = offset / limit)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -232,6 +238,7 @@ pub struct OrdersByMakerParams {
 
 /// Meta information for pagination
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Meta {
     pub total_items: u64,
     pub items_per_page: u64,
@@ -241,6 +248,7 @@ pub struct Meta {
 
 /// Cross chain order DTO
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CrossChainOrderDto {
     /// Some unique value. It is necessary to be able to create cross chain orders with the same parameters (so that they have a different hash), Lowest 160 bits of the order salt must be equal to the lowest 160 bits of the extension hash
     pub salt: String,
@@ -262,6 +270,7 @@ pub struct CrossChainOrderDto {
 
 /// Active orders output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ActiveOrdersOutput {
     /// Unique identifier of the order.
     pub order_hash: String,
@@ -299,6 +308,7 @@ pub struct ActiveOrdersOutput {
 
 /// Get active orders output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetActiveOrdersOutput {
     pub meta: Meta,
     pub items: Vec<ActiveOrdersOutput>,
@@ -306,6 +316,7 @@ pub struct GetActiveOrdersOutput {
 
 /// Escrow factory
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EscrowFactory {
     /// actual escrow factory contract address
     pub address: String,
@@ -313,6 +324,7 @@ pub struct EscrowFactory {
 
 /// Get order by maker output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetOrderByMakerOutput {
     pub meta: Meta,
     pub items: Vec<ActiveOrdersOutput>,
@@ -320,6 +332,7 @@ pub struct GetOrderByMakerOutput {
 
 /// Immutables
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Immutables {
     /// Order's hash 32 bytes hex sting
     pub order_hash: String,
@@ -341,6 +354,7 @@ pub struct Immutables {
 
 /// Public secret
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PublicSecret {
     /// Sequence number of secrets
     pub idx: u64,
@@ -354,6 +368,7 @@ pub struct PublicSecret {
 
 /// Resolver data output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolverDataOutput {
     /// Type of the order: enabled or disabled partial fills
     pub order_type: String,
@@ -365,6 +380,7 @@ pub struct ResolverDataOutput {
 
 /// Ready to accept secret fill
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadyToAcceptSecretFill {
     /// Sequence number of secrets for submission
     pub idx: u64,
@@ -376,6 +392,7 @@ pub struct ReadyToAcceptSecretFill {
 
 /// Ready to accept secret fills
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadyToAcceptSecretFills {
     /// Fills that are ready to accept secrets from the client
     pub fills: Vec<ReadyToAcceptSecretFill>,
@@ -383,6 +400,7 @@ pub struct ReadyToAcceptSecretFills {
 
 /// Ready to accept secret fills for order
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadyToAcceptSecretFillsForOrder {
     /// Order hash
     pub order_hash: String,
@@ -394,6 +412,7 @@ pub struct ReadyToAcceptSecretFillsForOrder {
 
 /// Ready to accept secret fills for all orders
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadyToAcceptSecretFillsForAllOrders {
     /// Fills that are ready to accept secrets from the client for all orders
     pub orders: Vec<ReadyToAcceptSecretFillsForOrder>,
@@ -401,6 +420,7 @@ pub struct ReadyToAcceptSecretFillsForAllOrders {
 
 /// Ready to execute public action
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadyToExecutePublicAction {
     /// Action type
     pub action: String,
@@ -417,6 +437,7 @@ pub struct ReadyToExecutePublicAction {
 
 /// Ready to execute public actions output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadyToExecutePublicActionsOutput {
     /// Actions allowed to be performed on public timelock periods
     pub actions: Vec<ReadyToExecutePublicAction>,
@@ -424,6 +445,7 @@ pub struct ReadyToExecutePublicActionsOutput {
 
 /// Limit order V4 struct output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LimitOrderV4StructOutput {
     pub salt: String,
     /// Maker address
@@ -443,6 +465,7 @@ pub struct LimitOrderV4StructOutput {
 
 /// Auction point output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuctionPointOutput {
     /// The delay in seconds from the previous point or auction start time
     pub delay: u64,
@@ -452,6 +475,7 @@ pub struct AuctionPointOutput {
 
 /// Escrow event data output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EscrowEventDataOutput {
     /// Transaction hash
     pub transaction_hash: String,
@@ -467,6 +491,7 @@ pub struct EscrowEventDataOutput {
 
 /// Fill output DTO
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FillOutputDto {
     /// Fill status
     pub status: String,
@@ -481,6 +506,7 @@ pub struct FillOutputDto {
 
 /// Get order fills by hash output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetOrderFillsByHashOutput {
     /// Order hash
     pub order_hash: String,
@@ -524,6 +550,7 @@ pub struct GetOrderFillsByHashOutput {
 
 /// Orders by hashes input
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OrdersByHashesInput {
     pub order_hashes: Vec<String>,
 }

@@ -6,14 +6,16 @@ use reqwest::Client;
 pub struct QuoterClient {
     client: Client,
     base_url: String,
+    api_key: String,
 }
 
 impl QuoterClient {
     /// Create a new quoter client
-    pub fn new(base_url: String) -> Self {
+    pub fn new(base_url: String, api_key: String) -> Self {
         Self {
             client: Client::new(),
             base_url,
+            api_key,
         }
     }
 
@@ -24,6 +26,7 @@ impl QuoterClient {
         let response = self.client
             .get(&url)
             .query(&params)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -47,6 +50,7 @@ impl QuoterClient {
             .post(&url)
             .query(&params)
             .json(&custom_preset)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -66,6 +70,7 @@ impl QuoterClient {
             .post(&url)
             .query(&params)
             .json(&body)
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
 
@@ -80,6 +85,7 @@ impl QuoterClient {
 
 /// Parameters for getting a quote
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QuoteParams {
     /// Id of source chain
     pub src_chain: u64,
@@ -108,6 +114,7 @@ pub struct QuoteParams {
 
 /// Parameters for building an order
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BuildOrderParams {
     /// Id of source chain
     pub src_chain: u64,
@@ -146,12 +153,14 @@ pub struct BuildOrderParams {
 
 /// Custom preset parameters
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CustomPresetParams {
     // This is an empty object in the OpenAPI spec
 }
 
 /// Build order body
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BuildOrderBody {
     /// quote from /receive
     pub quote: GetQuoteOutput,
@@ -161,6 +170,7 @@ pub struct BuildOrderBody {
 
 /// Build order output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BuildOrderOutput {
     /// EIP712 Typed Data
     pub typed_data: serde_json::Value,
@@ -172,6 +182,7 @@ pub struct BuildOrderOutput {
 
 /// Auction point
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuctionPoint {
     pub delay: u64,
     pub coefficient: f64,
@@ -179,6 +190,7 @@ pub struct AuctionPoint {
 
 /// Gas cost configuration
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GasCostConfig {
     pub gas_bump_estimate: u64,
     pub gas_price_estimate: String,
@@ -186,6 +198,7 @@ pub struct GasCostConfig {
 
 /// Preset configuration
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Preset {
     pub auction_duration: u64,
     pub start_auction_in: u64,
@@ -204,6 +217,7 @@ pub struct Preset {
 
 /// Quote presets
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QuotePresets {
     pub fast: Preset,
     pub medium: Preset,
@@ -214,6 +228,7 @@ pub struct QuotePresets {
 
 /// Time locks configuration
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TimeLocks {
     pub src_withdrawal: u64,
     pub src_public_withdrawal: u64,
@@ -226,6 +241,7 @@ pub struct TimeLocks {
 
 /// Token pair
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenPair {
     pub src_token: String,
     pub dst_token: String,
@@ -233,12 +249,14 @@ pub struct TokenPair {
 
 /// Pair currency
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PairCurrency {
     pub usd: TokenPair,
 }
 
 /// Get quote output
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetQuoteOutput {
     /// Current generated quote id, should be passed with order
     pub quote_id: serde_json::Value,
