@@ -136,4 +136,7 @@ dist
 
 # Vite logs files
 vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
+vite.config.ts.timestamp-i*
+
+#resolver-service
+resolver-service/target
