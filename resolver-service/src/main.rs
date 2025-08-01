@@ -20,10 +20,9 @@ async fn main() -> Result<()> {
 
     let settings = Settings::from_toml(SETTINGS_PATH)?;
 
-    let oneinch_api_key = std::env::var("ONEINCH_API_KEY").expect("ONEINCH_API_KEY must be set");
     let url = settings.orders_url.clone();
     
-    let order_client = OrdersClient::new(url.clone(), oneinch_api_key.clone());
+    let order_client = OrdersClient::new(url.clone());
 
     let mut order_mapper_builder = OrderMapper::builder();
 

@@ -3,14 +3,14 @@ use anyhow::Result;
 use moka::future::Cache;
 use tokio::time::sleep;
 
-use crate::oneinch::orders::{ActiveOrdersOutput, ActiveOrdersParams, OrderStatus, OrdersClient};
+use crate::oneinch::orders::{ActiveOrdersParams, OrderStatus, OrdersClient, ActiveOrder, OrderDetail};
 use crate::resolver::Resolver;
 
 #[derive(Debug)]
 pub struct OrderAction {
     pub order_id: String,
     pub action_type: ActionType,
-    pub order: ActiveOrdersOutput,
+    pub order: ActiveOrder,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -125,7 +125,7 @@ impl OrderMapper {
         }
     }
 
-    async fn execute_action(&self, order: &ActiveOrdersOutput, action_type: ActionType, resolver: &Box<dyn Resolver + Send + Sync>) -> Result<()> {
+    async fn execute_action(&self, order: &ActiveOrder, action_type: ActionType, resolver: &Box<dyn Resolver + Send + Sync>) -> Result<()> {
         let action = OrderAction {
             order_id: order.order_hash.clone(),
             action_type: action_type.clone(),
@@ -192,7 +192,16 @@ impl OrderMapper {
             if self.is_supported_order(&order) {
                 tracing::info!(order_id=?order_id, "Processing supported order");
 
-                let (source_action_type, destination_action_type) = self.determine_action(&order);
+                // Get detailed order information to determine status
+                let order_detail = match self.order_client.get_order_by_hash(&order_id).await {
+                    Ok(detail) => detail,
+                    Err(e) => {
+                        tracing::error!(order_id=?order_id, error=?e, "Failed to get order detail");
+                        continue;
+                    }
+                };
+
+                let (source_action_type, destination_action_type) = self.determine_action(&order_detail);
 
                 // Check if we should process source action
                 let should_process_source = self.should_process_action(&order_id, &source_action_type).await?;
@@ -246,14 +255,14 @@ impl OrderMapper {
         Ok(())
     }
 
-    fn is_supported_order(&self, order: &ActiveOrdersOutput) -> bool {
+    fn is_supported_order(&self, order: &ActiveOrder) -> bool {
         self.supported_chains.contains(&order.src_chain_id.to_string()) &&
         self.supported_chains.contains(&order.dst_chain_id.to_string()) &&
-        self.supported_assets.get(&order.src_chain_id.to_string()).map_or(false, |assets| assets.contains(&order.maker_asset)) &&
-        self.supported_assets.get(&order.dst_chain_id.to_string()).map_or(false, |assets| assets.contains(&order.taker_asset))
+        self.supported_assets.get(&order.src_chain_id.to_string()).map_or(false, |assets| assets.contains(&order.order.maker_asset)) &&
+        self.supported_assets.get(&order.dst_chain_id.to_string()).map_or(false, |assets| assets.contains(&order.order.taker_asset))
     }
 
-    fn determine_action(&self, order: &ActiveOrdersOutput) -> (ActionType, ActionType) {
+    fn determine_action(&self, order: &OrderDetail) -> (ActionType, ActionType) {
         match order.status {
             OrderStatus::Unmatched => (ActionType::DeployEscrow, ActionType::NoOp),
             OrderStatus::SourceFilled => (ActionType::NoOp, ActionType::DeployEscrow),
@@ -267,6 +276,7 @@ impl OrderMapper {
             OrderStatus::DestinationCanceled => (ActionType::NoOp, ActionType::RefundFunds),
             OrderStatus::DestinationRefunded => (ActionType::NoOp, ActionType::RefundFunds),
             OrderStatus::SourceRefunded => (ActionType::NoOp, ActionType::NoOp), // marks finality of the order
+            OrderStatus::FinalityConfirmed => (ActionType::NoOp, ActionType::NoOp), // secrets can be submitted
         }
     }
 }

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use crate::{order_mapper::{OrderAction}, resolver::Resolver, settings::ChainSettings};
 
+// Dummy contract impl should be replaced with actual contract impl
 pub struct ResolverContract {
     address: String,
     abi: String,
