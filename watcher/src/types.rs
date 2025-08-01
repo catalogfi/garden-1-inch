@@ -1,6 +1,5 @@
-use std::sync::Arc;
-
 use alloy::{network::Ethereum, providers::RootProvider};
+use serde::{Deserialize, Serialize};
 use starknet::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 
 pub type StarknetClient = JsonRpcClient<HttpTransport>;
@@ -10,12 +9,6 @@ pub type EthereumClient = RootProvider<Ethereum>;
 pub enum ChainType {
     Ethereum,
     Starknet,
-}
-
-#[derive(Clone, Debug)]
-pub enum ClientType {
-    Ethereum(Arc<EthereumClient>),
-    Starknet(Arc<StarknetClient>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -45,30 +38,39 @@ impl ChainType {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum OrderStatus {
     Unmatched,
     SourceFilled,
     DestinationFilled,
+    FinalityConfirmed,
     SourceWithdrawPending,
     DestinationWithdrawPending,
     SourceSettled,
     DestinationSettled,
+    SourceRefunded,
+    DestinationRefunded,
+    SourceCanceled,
+    DestinationCanceled,
     Expired,
-    Refunded,
 }
 
 impl OrderStatus {
     pub fn to_string(&self) -> &str {
         match self {
-            OrderStatus::Unmatched => "unmatched",
-            OrderStatus::SourceFilled => "source_filled",
-            OrderStatus::DestinationFilled => "destination_filled",
-            OrderStatus::SourceWithdrawPending => "source_withdraw_pending",
-            OrderStatus::DestinationWithdrawPending => "destination_withdraw_pending",
-            OrderStatus::SourceSettled => "source_settled",
-            OrderStatus::DestinationSettled => "destination_settled",
-            OrderStatus::Expired => "expired",
-            OrderStatus::Refunded => "refunded",
+            OrderStatus::Unmatched => "Unmatched",
+            OrderStatus::SourceFilled => "SourceFilled",
+            OrderStatus::DestinationFilled => "DestinationFilled",
+            OrderStatus::FinalityConfirmed => "FinalityConfirmed",
+            OrderStatus::SourceWithdrawPending => "SourceWithdrawPending",
+            OrderStatus::DestinationWithdrawPending => "DestinationWithdrawPending",
+            OrderStatus::SourceSettled => "SourceSettled",
+            OrderStatus::DestinationSettled => "DestinationSettled",
+            OrderStatus::SourceRefunded => "SourceRefunded",
+            OrderStatus::DestinationRefunded => "DestinationRefunded",
+            OrderStatus::SourceCanceled => "SourceCanceled",
+            OrderStatus::DestinationCanceled => "DestinationCanceled",
+            OrderStatus::Expired => "Expired",
         }
     }
 }

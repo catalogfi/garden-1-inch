@@ -1,11 +1,15 @@
 [core]
-db_url="postgres://king:mangarock@localhost:5432/watcher"
-polling_interval=5000
+db_url = "postgres://king:mangarock@localhost:5432/wallet_db"
+polling_interval = 5000
 
 [Rpc]
-ethereum_rpc="http://localhost:4040"
-starknet_rpc="http://localhost:5050"
+ethereum_rpc = "https://eth.llamarpc.com"
+starknet_rpc = "https://rpc.starknet.lava.build:443"
 
 [contracts]
-starknet="0x"
-ethereum="0x"
+# starknet = "0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D"
+starknet = ""
+ethereum = "0x230350B554E468E073B1d44Ce7cD4C6d725dd4a5"
+ethereum_start_block = 23044259
+# starknet_start_block = 0
+starknet_start_block = 1661663

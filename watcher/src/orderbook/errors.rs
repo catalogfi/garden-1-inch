@@ -4,7 +4,7 @@ use std::fmt;
 pub enum OrderbookError {
     Database(sqlx::Error),
     Validation(String),
-    Serialization(String)
+    Serialization(String),
 }
 
 impl fmt::Display for OrderbookError {
