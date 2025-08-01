@@ -22,11 +22,12 @@ impl OrderbookProvider {
         Ok(Self::new(pool))
     }
 
-    /// Create the orders table with updated schema
+    /// Table Schema for cross_chain_orders
+    /// This table will store all cross-chain orders with their statuses
     pub async fn create_tables(&self) -> Result<(), OrderbookError> {
         let create_table_sql = r#"
-            CREATE TABLE IF NOT EXISTS cross_chain_orders (
-                id UUID PRIMARY KEY,
+            CREATE TABLE cross_chain_orders (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 order_hash VARCHAR(66) UNIQUE NOT NULL,
                 quote_id VARCHAR(255) NOT NULL,
                 src_chain_id BIGINT NOT NULL,
@@ -41,39 +42,30 @@ impl OrderbookProvider {
                 maker_traits VARCHAR(255) NOT NULL DEFAULT '0',
                 signature TEXT NOT NULL,
                 extension TEXT NOT NULL,
-                secret_hashes JSONB,
-                secrets JSONB,
-                status VARCHAR(50) NOT NULL DEFAULT 'unmatched',
-                deadline BIGINT,
-                auction_start_date TIMESTAMP WITH TIME ZONE,
-                auction_end_date TIMESTAMP WITH TIME ZONE,
+                order_type TEXT NOT NULL DEFAULT 'single_fill',
+                secrets JSONB NOT NULL DEFAULT '[]'::jsonb,
+                
+                -- Status and lifecycle fields
+                status TEXT NOT NULL DEFAULT 'unmatched',
+                deadline BIGINT NOT NULL,
+                auction_start_date BIGINT,
+                auction_end_date BIGINT,
+                
+                -- Fill tracking
                 src_escrow_address VARCHAR(42),
                 dst_escrow_address VARCHAR(42),
                 src_tx_hash VARCHAR(66),
                 dst_tx_hash VARCHAR(66),
                 filled_maker_amount NUMERIC DEFAULT 0,
                 filled_taker_amount NUMERIC DEFAULT 0,
-                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+                
+                -- Timestamps
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )
         "#;
 
         sqlx::query(create_table_sql).execute(&self.pool).await?;
-
-        // Create indexes
-        let indexes = vec![
-            "CREATE INDEX IF NOT EXISTS idx_orders_maker ON cross_chain_orders(maker)",
-            "CREATE INDEX IF NOT EXISTS idx_orders_src_chain ON cross_chain_orders(src_chain_id)",
-            "CREATE INDEX IF NOT EXISTS idx_orders_dst_chain ON cross_chain_orders(dst_chain_id)",
-            "CREATE INDEX IF NOT EXISTS idx_orders_status ON cross_chain_orders(status)",
-            "CREATE INDEX IF NOT EXISTS idx_orders_created_at ON cross_chain_orders(created_at)",
-            "CREATE INDEX IF NOT EXISTS idx_orders_deadline ON cross_chain_orders(deadline)",
-        ];
-
-        for index_sql in indexes {
-            sqlx::query(index_sql).execute(&self.pool).await?;
-        }
-
         Ok(())
     }
 
@@ -105,10 +97,9 @@ impl OrderbookProvider {
         let query = format!(
             r#"
             UPDATE cross_chain_orders 
-            SET status = $1, {} = $2, updated_at = NOW()
+            SET status = $1, {address_field} = $2, updated_at = NOW()
             WHERE order_hash = $3
-        "#,
-            address_field
+        "#
         );
 
         sqlx::query(&query)
