@@ -126,7 +126,7 @@ impl Chain for EthereumChain {
     }
 
     async fn process_log(&self, log: Log) -> anyhow::Result<()> {
-        // info!("Processing log: {:#?}", log);
+        info!("Processing log: {:#?}", log);
 
         match decode_log_with_abi(&self.abi, &log)? {
             Some((event_name, decoded_event)) => {

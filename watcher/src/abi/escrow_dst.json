@@ -106,61 +106,6 @@
     },
     {
         "type": "function",
-        "name": "publicCancel",
-        "inputs": [
-            {
-                "name": "immutables",
-                "type": "tuple",
-                "internalType": "struct IBaseEscrow.Immutables",
-                "components": [
-                    {
-                        "name": "orderHash",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "hashlock",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "maker",
-                        "type": "uint256",
-                        "internalType": "Address"
-                    },
-                    {
-                        "name": "taker",
-                        "type": "uint256",
-                        "internalType": "Address"
-                    },
-                    {
-                        "name": "token",
-                        "type": "uint256",
-                        "internalType": "Address"
-                    },
-                    {
-                        "name": "amount",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "safetyDeposit",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timelocks",
-                        "type": "uint256",
-                        "internalType": "Timelocks"
-                    }
-                ]
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
-        "type": "function",
         "name": "publicWithdraw",
         "inputs": [
             {
@@ -345,71 +290,6 @@
         "stateMutability": "nonpayable"
     },
     {
-        "type": "function",
-        "name": "withdrawTo",
-        "inputs": [
-            {
-                "name": "secret",
-                "type": "bytes32",
-                "internalType": "bytes32"
-            },
-            {
-                "name": "target",
-                "type": "address",
-                "internalType": "address"
-            },
-            {
-                "name": "immutables",
-                "type": "tuple",
-                "internalType": "struct IBaseEscrow.Immutables",
-                "components": [
-                    {
-                        "name": "orderHash",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "hashlock",
-                        "type": "bytes32",
-                        "internalType": "bytes32"
-                    },
-                    {
-                        "name": "maker",
-                        "type": "uint256",
-                        "internalType": "Address"
-                    },
-                    {
-                        "name": "taker",
-                        "type": "uint256",
-                        "internalType": "Address"
-                    },
-                    {
-                        "name": "token",
-                        "type": "uint256",
-                        "internalType": "Address"
-                    },
-                    {
-                        "name": "amount",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "safetyDeposit",
-                        "type": "uint256",
-                        "internalType": "uint256"
-                    },
-                    {
-                        "name": "timelocks",
-                        "type": "uint256",
-                        "internalType": "Timelocks"
-                    }
-                ]
-            }
-        ],
-        "outputs": [],
-        "stateMutability": "nonpayable"
-    },
-    {
         "type": "event",
         "name": "EscrowCancelled",
         "inputs": [],
@@ -440,6 +320,12 @@
         "inputs": [
             {
                 "name": "secret",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "orderHash",
                 "type": "bytes32",
                 "indexed": false,
                 "internalType": "bytes32"
