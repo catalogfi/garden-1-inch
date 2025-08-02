@@ -9,6 +9,8 @@ mod evm;
 pub trait Resolver: Send + Sync {
     async fn deploy_src_escrow(&self, order_action: &OrderAction) -> Result<()>;
     async fn deploy_dest_escrow(&self, order_action: &OrderAction) -> Result<()>;
+    async fn widthdraw_src_escrow(&self, order_action: &OrderAction) -> Result<()>;
+    async fn widthdraw_dest_escrow(&self, order_action: &OrderAction) -> Result<()>;
     async fn arbitrary_calls(&self, order_action: &OrderAction) -> Result<()>;
 }
 

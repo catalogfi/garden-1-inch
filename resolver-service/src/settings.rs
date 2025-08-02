@@ -22,7 +22,7 @@ pub struct Settings {
 #[derive(Debug, Deserialize)]
 pub struct ChainSettings {
     pub chain_type: ChainType,
-    pub chain_id: String,
+    pub chain_id: u64,
     pub assets: Vec<String>,
     pub resolver_contract_address: String,
     pub provider: String,

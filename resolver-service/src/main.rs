@@ -32,6 +32,7 @@ async fn main() -> Result<()> {
         .with_action_ttl(Duration::from_secs(300)); // 5 minutes TTL for action reprocessing
     
     for (chain_name, chain_settings) in settings.chains {
+        tracing::info!("chain_name: {:?} and assets: {:?}", chain_name, chain_settings.assets);
         let chain_id = chain_settings.chain_id.clone();
         let assets = chain_settings.assets.clone();
 
