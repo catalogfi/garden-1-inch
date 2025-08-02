@@ -1,4 +1,5 @@
 use crate::{chains::traits::Chain, orderbook::provider::OrderbookProvider};
+use alloy::json_abi::JsonAbi;
 use async_trait::async_trait;
 use reqwest::Url;
 use starknet::{
@@ -30,6 +31,7 @@ impl Chain for StarknetChain {
         contract_address: String,
         db: Arc<OrderbookProvider>,
         start_block: u64,
+        _abi: JsonAbi,
     ) -> anyhow::Result<Self> {
         let transport = HttpTransport::new(Url::parse(&rpc_url)?);
         let client = Arc::new(JsonRpcClient::new(transport));

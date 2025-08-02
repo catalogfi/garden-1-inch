@@ -1,8 +1,10 @@
 use crate::{
     orderbook::errors::OrderbookError,
-    types::{OrderStatus, WatcherEventType},
+    types::{OrderStatus, SecretEntry, WatcherEventType},
 };
+use serde_json::Value;
 use sqlx::{Pool, Postgres};
+use tracing::warn;
 
 #[derive(Clone, Debug)]
 pub struct OrderbookProvider {
@@ -120,7 +122,7 @@ impl OrderbookProvider {
         let result = sqlx::query(&query)
             .bind(status.to_string())
             .bind(escrow_address)
-            .bind(order_hash)
+            .bind(format!("0x{order_hash}"))
             .bind(block_hash)
             .execute(&self.pool)
             .await?;
@@ -137,6 +139,47 @@ impl OrderbookProvider {
                 status.to_string(),
                 escrow_address,
                 block_hash
+            );
+        }
+
+        Ok(())
+    }
+
+    pub async fn update_secrets(
+        &self,
+        order_hash: &str,
+        secrets: &Value,
+    ) -> Result<(), OrderbookError> {
+        let parsed: Vec<SecretEntry> = serde_json::from_value(secrets.clone()).map_err(|e| {
+            warn!("Failed to deserialize secrets: {}", e);
+            OrderbookError::Serialization(e.to_string())
+        })?;
+
+        let result = sqlx::query(
+            r#"
+        UPDATE orders
+        SET secrets = $1, updated_at = NOW()
+        WHERE order_hash = $2
+        "#,
+        )
+        .bind(secrets)
+        .bind(order_hash)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            tracing::warn!(
+                "No rows updated when setting secrets for order_hash: {}",
+                order_hash
+            );
+            return Err(OrderbookError::NotFound(format!(
+                "Order with hash {order_hash} not found"
+            )));
+        } else {
+            tracing::info!(
+                "Secrets updated for order_hash: {} with {} entries",
+                order_hash,
+                parsed.len()
             );
         }
 
