@@ -162,6 +162,7 @@ pub enum OrderType {
 
 /// Secret entry structure for storing secrets and their hashes
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SecretEntry {
     pub index: u32,
     pub secret: Option<String>,

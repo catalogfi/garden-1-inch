@@ -9,7 +9,7 @@ use crate::{oneinch::orders::{ActiveOrderOutput, ActiveOrdersParams, OrderDetail
 pub struct OrderAction {
     pub order_id: String,
     pub action_type: ActionType,
-    pub order: ActiveOrderOutput,
+    pub order: OrderDetail,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -113,10 +113,11 @@ impl OrderMapper {
     
     pub async fn run(&mut self) {
         tracing::info!("OrderMapper started with {} supported chains", self.supported_chains.len());
+        // self.processing_orders.insert("0xcfdc00bcf11a90fe1041b982ccdca4f63ff79d6f071afb74c90aa0554cb3eb58".to_string(), (ActionType::WidthdrawSrcEscrow, SystemTime::now())).await;
         for (chain_id, assets) in &self.supported_assets {
             tracing::info!(chain_id=?chain_id, assets_count=assets.len(), "Chain supports assets");
         }
-        self.processing_orders.insert("0xcf785dc757bd947b8f379522bcc832d2c87def47fb1813f3a15aaf2c06266915".to_string(), (ActionType::WidthdrawSrcEscrow, SystemTime::now())).await;
+        
         loop {
             tracing::info!("Processing orders");
             if let Err(e) = self.discover_and_track_orders().await {
@@ -131,7 +132,7 @@ impl OrderMapper {
         }
     }
 
-    async fn execute_action(&self, order: &ActiveOrderOutput, action_type: ActionType, resolver: &Box<dyn Resolver + Send + Sync>) -> Result<()> {
+    async fn execute_action(&self, order: &OrderDetail, action_type: ActionType, resolver: &Box<dyn Resolver + Send + Sync>) -> Result<()> {
         let action = OrderAction {
             order_id: order.order_hash.clone(),
             action_type: action_type.clone(),
@@ -201,9 +202,17 @@ impl OrderMapper {
         
         for order in orders.items {
             let order_id = order.order_hash.clone();
+            // Get detailed order information to check if supported
+            let order_detail = match self.order_client.get_order_by_hash(&order_id).await {
+                Ok(detail) => detail,
+                Err(e) => {
+                    tracing::error!(order_id=?order_id, error=?e, "Failed to get order detail for discovery");
+                    continue;
+                }
+            };
             
             // Check if we support the asset on both chains
-            if self.is_supported_order(&order) {
+            if self.is_supported_order(&order_detail) {
                 tracing::info!(order_id=?order_id, "Adding supported order to tracking");
                 self.processing_orders.insert(order_id, (ActionType::NoOp, SystemTime::now())).await;
             } else {
@@ -236,35 +245,6 @@ impl OrderMapper {
                 }
             };
 
-            // Convert OrderDetail to ActiveOrderOutput for processing
-            let order = ActiveOrderOutput {
-                order_hash: order_detail.order_hash.clone(),
-                signature: order_detail.signature.clone(),
-                deadline: order_detail.deadline,
-                auction_start_date: order_detail.auction_start_date.clone(),
-                auction_end_date: order_detail.auction_end_date.clone(),
-                remaining_maker_amount: order_detail.filled_maker_amount.to_string(),
-                extension: order_detail.extension.clone(),
-                src_chain_id: order_detail.src_chain_id,
-                dst_chain_id: order_detail.dst_chain_id,
-                order: crate::oneinch::orders::OrderInput {
-                    salt: order_detail.salt.clone(),
-                    maker_asset: order_detail.maker_asset.clone(),
-                    taker_asset: order_detail.taker_asset.clone(),
-                    maker: order_detail.maker.clone(),
-                    receiver: order_detail.receiver.clone(),
-                    making_amount: order_detail.making_amount.clone(),
-                    taking_amount: order_detail.taking_amount.clone(),
-                    maker_traits: order_detail.maker_traits.clone(),
-                },
-                taker: order_detail.taker.clone(),
-                timelock: order_detail.timelock.clone(),
-                taker_traits: order_detail.taker_traits.clone(),
-                args: order_detail.args.clone(),
-                order_type: order_detail.order_type.clone(),
-                secrets: order_detail.secrets.clone(),
-            };
-
             tracing::warn!("order status: {:?}", order_detail.status);
 
             let (source_action_type, destination_action_type) = self.determine_action(&order_detail);
@@ -279,126 +259,53 @@ impl OrderMapper {
             }
 
             // Get resolvers with better error handling
-            let source_chain_resolver = self.chain_resolvers.get(&order.src_chain_id)
-                .ok_or_else(|| anyhow::anyhow!("Source chain resolver not found for chain {}", order.src_chain_id))?;
+            let source_chain_resolver = self.chain_resolvers.get(&order_detail.src_chain_id)
+                .ok_or_else(|| anyhow::anyhow!("Source chain resolver not found for chain {}", order_detail.src_chain_id))?;
             
-            let destination_chain_resolver = self.chain_resolvers.get(&order.dst_chain_id)
-                .ok_or_else(|| anyhow::anyhow!("Destination chain resolver not found for chain {}", order.dst_chain_id))?;
+            let destination_chain_resolver = self.chain_resolvers.get(&order_detail.dst_chain_id)
+                .ok_or_else(|| anyhow::anyhow!("Destination chain resolver not found for chain {}", order_detail.dst_chain_id))?;
             
             // Process source action if needed
             if should_process_source {
-                match self.execute_action(&order, source_action_type.clone(), source_chain_resolver).await {
+                match self.execute_action(&order_detail, source_action_type.clone(), source_chain_resolver).await {
                     Ok(_) => {
-                        tracing::info!(order_id=?order_hash, src_chain_id=?order.src_chain_id, "Executed action on source chain resolver");
+                        tracing::info!(order_id=?order_hash, src_chain_id=?order_detail.src_chain_id, "Executed action on source chain resolver");
                         // Cache the processed action
                         self.processing_orders.insert(order_hash.clone(), (source_action_type.clone(), SystemTime::now())).await;
                     }
                     Err(e) => {
                         tracing::error!(order_id=?order_hash, error=?e, "Failed to execute action on source chain resolver");
-                        return Err(anyhow::anyhow!("Failed to execute action on source chain resolver: {}", e));
+                        continue;
                     }
                 }
             }
             
             // Process destination action if needed
             if should_process_dest {
-                match self.execute_action(&order, destination_action_type.clone(), destination_chain_resolver).await {
+                match self.execute_action(&order_detail, destination_action_type.clone(), destination_chain_resolver).await {
                     Ok(_) => {
-                        tracing::info!(order_id=?order_hash, dst_chain_id=?order.dst_chain_id, "Executed action on destination chain resolver");
+                        tracing::info!(order_id=?order_hash, dst_chain_id=?order_detail.dst_chain_id, "Executed action on destination chain resolver");
                         // Cache the processed action (use destination action for caching)
                         self.processing_orders.insert(order_hash.clone(), (destination_action_type.clone(), SystemTime::now())).await;
                     }
                     Err(e) => {
                         tracing::error!(order_id=?order_hash, error=?e, "Failed to execute action on destination chain resolver");
-                        return Err(anyhow::anyhow!("Failed to execute action on destination chain resolver: {}", e));
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    async fn process_orders(&mut self) -> Result<()> {
-        let orders = self.order_client.get_active_orders(ActiveOrdersParams::new()).await?;
-        tracing::info!("Processing {} orders", orders.items.len());
-        
-        for order in orders.items {
-            let order_id = order.order_hash.clone();
-            tracing::info!("Processing order: {:?}", order_id);
-            // Check if we support the asset on both chains
-            if self.is_supported_order(&order) {
-                tracing::info!(order_id=?order_id, "Processing supported order");
-
-                // Get detailed order information to determine status
-                let order_detail = match self.order_client.get_order_by_hash(&order_id).await {
-                    Ok(detail) => detail,
-                    Err(e) => {
-                        tracing::error!(order_id=?order_id, error=?e, "Failed to get order detail");
                         continue;
                     }
-                };
-
-                let (source_action_type, destination_action_type) = self.determine_action(&order_detail);
-
-                // Check if we should process source action
-                let should_process_source = self.should_process_action(&order_id, &source_action_type).await?;
-                let should_process_dest = self.should_process_action(&order_id, &destination_action_type).await?;
-
-                if !should_process_source && !should_process_dest {
-                    tracing::debug!(order_id=?order_id, "Skipping order - no new actions to process");
-                    continue;
                 }
-
-                // Get resolvers with better error handling
-                let source_chain_resolver = self.chain_resolvers.get(&order.src_chain_id)
-                    .ok_or_else(|| anyhow::anyhow!("Source chain resolver not found for chain {}", order.src_chain_id))?;
-                
-                let destination_chain_resolver = self.chain_resolvers.get(&order.dst_chain_id)
-                    .ok_or_else(|| anyhow::anyhow!("Destination chain resolver not found for chain {}", order.dst_chain_id))?;
-                
-                // Process source action if needed
-                if should_process_source {
-                    match self.execute_action(&order, source_action_type.clone(), source_chain_resolver).await {
-                        Ok(_) => {
-                            tracing::info!(order_id=?order_id, src_chain_id=?order.src_chain_id, "Executed action on source chain resolver");
-                            // Cache the processed action
-                            self.processing_orders.insert(order_id.clone(), (source_action_type.clone(), SystemTime::now())).await;
-                        }
-                        Err(e) => {
-                            tracing::error!(order_id=?order_id, error=?e, "Failed to execute action on source chain resolver");
-                            return Err(anyhow::anyhow!("Failed to execute action on source chain resolver: {}", e));
-                        }
-                    }
-                }
-                
-                // Process destination action if needed
-                if should_process_dest {
-                    match self.execute_action(&order, destination_action_type.clone(), destination_chain_resolver).await {
-                        Ok(_) => {
-                            tracing::info!(order_id=?order_id, dst_chain_id=?order.dst_chain_id, "Executed action on destination chain resolver");
-                            // Cache the processed action (use destination action for caching)
-                            self.processing_orders.insert(order_id.clone(), (destination_action_type.clone(), SystemTime::now())).await;
-                        }
-                        Err(e) => {
-                            tracing::error!(order_id=?order_id, error=?e, "Failed to execute action on destination chain resolver");
-                            return Err(anyhow::anyhow!("Failed to execute action on destination chain resolver: {}", e));
-                        }
-                    }
-                }
-            } else {
-                tracing::debug!(order_id=?order_id, "Order not supported, skipping");
             }
         }
         Ok(())
     }
 
-    fn is_supported_order(&self, order: &ActiveOrderOutput) -> bool {
+
+    fn is_supported_order(&self, order: &OrderDetail) -> bool {
         tracing::info!("supported_chains: {:?}", self.supported_chains);
         tracing::info!("supported_assets: {:?}", self.supported_assets);
         self.supported_chains.contains(&order.src_chain_id) &&
         self.supported_chains.contains(&order.dst_chain_id) &&
-        self.supported_assets.get(&order.src_chain_id).map_or(false, |assets| assets.contains(&order.order.maker_asset)) &&
-        self.supported_assets.get(&order.dst_chain_id).map_or(false, |assets| assets.contains(&order.order.taker_asset))
+        self.supported_assets.get(&order.src_chain_id).map_or(false, |assets| assets.contains(&order.maker_asset)) &&
+        self.supported_assets.get(&order.dst_chain_id).map_or(false, |assets| assets.contains(&order.taker_asset))
     }
 
     fn determine_action(&self, order: &OrderDetail) -> (ActionType, ActionType) {
@@ -409,10 +316,10 @@ impl OrderMapper {
         match order.status {
             OrderStatus::Unmatched => (ActionType::DeploySrcEscrow, ActionType::NoOp),
             OrderStatus::SourceFilled => (ActionType::NoOp, ActionType::DeployDestEscrow),
-            OrderStatus::DestinationFilled => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::DestinationFilled => (ActionType::WidthdrawSrcEscrow, ActionType::NoOp),
             OrderStatus::SourceWithdrawPending => (ActionType::WidthdrawSrcEscrow, ActionType::NoOp),
             OrderStatus::DestinationWithdrawPending => (ActionType::NoOp, ActionType::WidthdrawDestEscrow),
-            OrderStatus::SourceSettled => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::SourceSettled => (ActionType::NoOp, ActionType::WidthdrawDestEscrow),
             OrderStatus::DestinationSettled => (ActionType::NoOp, ActionType::NoOp),
             OrderStatus::Expired => (ActionType::ArbitraryCalls, ActionType::ArbitraryCalls),
             OrderStatus::SourceCanceled => (ActionType::NoOp, ActionType::NoOp),
