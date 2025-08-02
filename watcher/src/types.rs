@@ -7,33 +7,25 @@ pub type EthereumClient = RootProvider<Ethereum>;
 
 #[derive(Debug, Clone)]
 pub enum ChainType {
-    Ethereum,
-    Starknet,
+    Ethereum(String),
+    Starknet(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum WatcherEventType {
-    SourceEscrowCreated,
-    SourceEscrowUpdated,
-    SourceEscrowClosed,
-    DestinationEscrowCreated,
-    DestinationEscrowUpdated,
-    DestinationEscrowClosed,
+    SrcEscrowCreatedEvent,
+    DstEscrowCreatedEvent,
+    SourceWithdraw,
+    DestinationWithdraw,
+    SourceRescue,
+    DestinationRescue,
 }
 
 impl ChainType {
-    pub fn is_ethereum(&self) -> bool {
-        matches!(self, ChainType::Ethereum)
-    }
-
-    pub fn is_starknet(&self) -> bool {
-        matches!(self, ChainType::Starknet)
-    }
-
-    pub fn to_string(&self) -> &'static str {
+    pub fn name(&self) -> &str {
         match self {
-            ChainType::Ethereum => "Ethereum",
-            ChainType::Starknet => "Starknet",
+            ChainType::Ethereum(name) => name,
+            ChainType::Starknet(name) => name,
         }
     }
 }
@@ -53,24 +45,26 @@ pub enum OrderStatus {
     SourceCanceled,
     DestinationCanceled,
     Expired,
+    FulFilled,
 }
 
 impl OrderStatus {
     pub fn to_string(&self) -> &str {
         match self {
-            OrderStatus::Unmatched => "Unmatched",
-            OrderStatus::SourceFilled => "SourceFilled",
-            OrderStatus::DestinationFilled => "DestinationFilled",
-            OrderStatus::FinalityConfirmed => "FinalityConfirmed",
-            OrderStatus::SourceWithdrawPending => "SourceWithdrawPending",
-            OrderStatus::DestinationWithdrawPending => "DestinationWithdrawPending",
-            OrderStatus::SourceSettled => "SourceSettled",
-            OrderStatus::DestinationSettled => "DestinationSettled",
-            OrderStatus::SourceRefunded => "SourceRefunded",
-            OrderStatus::DestinationRefunded => "DestinationRefunded",
-            OrderStatus::SourceCanceled => "SourceCanceled",
-            OrderStatus::DestinationCanceled => "DestinationCanceled",
-            OrderStatus::Expired => "Expired",
+            OrderStatus::Unmatched => "unmatched",
+            OrderStatus::SourceFilled => "source_filled",
+            OrderStatus::DestinationFilled => "destination_filled",
+            OrderStatus::FinalityConfirmed => "finality_confirmed",
+            OrderStatus::SourceWithdrawPending => "source_withdraw_pending",
+            OrderStatus::DestinationWithdrawPending => "destination_withdraw_pending",
+            OrderStatus::SourceSettled => "source_settled",
+            OrderStatus::DestinationSettled => "destination_settled",
+            OrderStatus::SourceRefunded => "source_refunded",
+            OrderStatus::DestinationRefunded => "destination_refunded",
+            OrderStatus::SourceCanceled => "source_canceled",
+            OrderStatus::DestinationCanceled => "destination_canceled",
+            OrderStatus::Expired => "expired",
+            OrderStatus::FulFilled => "fulfilled",
         }
     }
 }

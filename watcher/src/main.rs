@@ -51,40 +51,56 @@ fn start_server(config: WatcherConfig) {
 async fn start_watchers(config: WatcherConfig, db: Arc<OrderbookProvider>) -> anyhow::Result<()> {
     let mut watchers = Vec::new();
 
-    if !config.rpc.ethereum_rpc.is_empty() && !config.contracts.ethereum_contract_address.is_empty()
-    {
-        watchers.push(
-            Watcher::new(
-                config.rpc.ethereum_rpc.clone(),
-                config.contracts.ethereum_contract_address.clone(),
-                ChainType::Ethereum,
+    for evm_config in config.chains.evm {
+        if !evm_config.rpc_url.is_empty() && !evm_config.contract_address.is_empty() {
+            tracing::info!("Initializing {} watcher", evm_config.name);
+
+            let watcher = Watcher::new(
+                evm_config.rpc_url.clone(),
+                evm_config.contract_address.clone(),
+                ChainType::Ethereum(evm_config.name.clone()),
                 db.clone(),
-                config.contracts.ethereum_start_block,
+                evm_config.start_block,
             )
-            .await?,
-        );
+            .await?;
+
+            watchers.push(watcher);
+        }
     }
 
-    if !config.contracts.starknet_contract_address.is_empty() {
-        watchers.push(
-            Watcher::new(
-                config.rpc.starknet_rpc.clone(),
-                config.contracts.starknet_contract_address.clone(),
-                ChainType::Starknet,
+    for starknet_config in config.chains.starknet {
+        if !starknet_config.rpc_url.is_empty() && !starknet_config.contract_address.is_empty() {
+            tracing::info!("Initializing {} watcher", starknet_config.name);
+
+            let watcher = Watcher::new(
+                starknet_config.rpc_url.clone(),
+                starknet_config.contract_address.clone(),
+                ChainType::Starknet(starknet_config.name.clone()),
                 db.clone(),
-                config.contracts.starknet_start_block,
+                starknet_config.start_block,
             )
-            .await?,
-        );
+            .await?;
+
+            watchers.push(watcher);
+        }
     }
 
     for mut watcher in watchers {
+        let chain_name = watcher.chain_name().to_string();
         tokio::spawn(async move {
             if let Err(e) = watcher.start().await {
-                tracing::error!("Watcher error: {:?}", e);
+                tracing::error!("Watcher error for {}: {:?}", chain_name, e);
             }
         });
+
+        
     }
+
+    tracing::info!("All watchers started successfully");
+
+    // TODO: Add cron job for database polling
+    // - Check for pending orders
+    // - Handle orders that are source filled but not source settled or refunded
 
     Ok(())
 }

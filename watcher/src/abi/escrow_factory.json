@@ -1,0 +1,997 @@
+[
+    {
+        "type": "constructor",
+        "inputs": [
+            {
+                "name": "limitOrderProtocol",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "feeToken",
+                "type": "address",
+                "internalType": "contract IERC20"
+            },
+            {
+                "name": "accessToken",
+                "type": "address",
+                "internalType": "contract IERC20"
+            },
+            {
+                "name": "owner",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "rescueDelaySrc",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "rescueDelayDst",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "ESCROW_DST_IMPLEMENTATION",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "ESCROW_SRC_IMPLEMENTATION",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "FEE_BANK",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "contract IFeeBank"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "addressOfEscrowDst",
+        "inputs": [
+            {
+                "name": "immutables",
+                "type": "tuple",
+                "internalType": "struct IBaseEscrow.Immutables",
+                "components": [
+                    {
+                        "name": "orderHash",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "hashlock",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "taker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "token",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "safetyDeposit",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "timelocks",
+                        "type": "uint256",
+                        "internalType": "Timelocks"
+                    }
+                ]
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "addressOfEscrowSrc",
+        "inputs": [
+            {
+                "name": "immutables",
+                "type": "tuple",
+                "internalType": "struct IBaseEscrow.Immutables",
+                "components": [
+                    {
+                        "name": "orderHash",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "hashlock",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "taker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "token",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "safetyDeposit",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "timelocks",
+                        "type": "uint256",
+                        "internalType": "Timelocks"
+                    }
+                ]
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "availableCredit",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "createDstEscrow",
+        "inputs": [
+            {
+                "name": "dstImmutables",
+                "type": "tuple",
+                "internalType": "struct IBaseEscrow.Immutables",
+                "components": [
+                    {
+                        "name": "orderHash",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "hashlock",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "taker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "token",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "safetyDeposit",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "timelocks",
+                        "type": "uint256",
+                        "internalType": "Timelocks"
+                    }
+                ]
+            },
+            {
+                "name": "srcCancellationTimestamp",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+    },
+    {
+        "type": "function",
+        "name": "decreaseAvailableCredit",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "allowance",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "getMakingAmount",
+        "inputs": [
+            {
+                "name": "order",
+                "type": "tuple",
+                "internalType": "struct IOrderMixin.Order",
+                "components": [
+                    {
+                        "name": "salt",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "receiver",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "takerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "takingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "makerTraits",
+                        "type": "uint256",
+                        "internalType": "MakerTraits"
+                    }
+                ]
+            },
+            {
+                "name": "",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "takingAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "extraData",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "getTakingAmount",
+        "inputs": [
+            {
+                "name": "order",
+                "type": "tuple",
+                "internalType": "struct IOrderMixin.Order",
+                "components": [
+                    {
+                        "name": "salt",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "receiver",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "takerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "takingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "makerTraits",
+                        "type": "uint256",
+                        "internalType": "MakerTraits"
+                    }
+                ]
+            },
+            {
+                "name": "",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "makingAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "extraData",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "increaseAvailableCredit",
+        "inputs": [
+            {
+                "name": "account",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "allowance",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "lastValidated",
+        "inputs": [
+            {
+                "name": "key",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "index",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "leaf",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "postInteraction",
+        "inputs": [
+            {
+                "name": "order",
+                "type": "tuple",
+                "internalType": "struct IOrderMixin.Order",
+                "components": [
+                    {
+                        "name": "salt",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "receiver",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "takerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "takingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "makerTraits",
+                        "type": "uint256",
+                        "internalType": "MakerTraits"
+                    }
+                ]
+            },
+            {
+                "name": "extension",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "orderHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "taker",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "makingAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "takingAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "remainingMakingAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "extraData",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "preInteraction",
+        "inputs": [
+            {
+                "name": "order",
+                "type": "tuple",
+                "internalType": "struct IOrderMixin.Order",
+                "components": [
+                    {
+                        "name": "salt",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "receiver",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "takerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "takingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "makerTraits",
+                        "type": "uint256",
+                        "internalType": "MakerTraits"
+                    }
+                ]
+            },
+            {
+                "name": "extension",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "orderHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "taker",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "makingAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "takingAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "remainingMakingAmount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "extraData",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "takerInteraction",
+        "inputs": [
+            {
+                "name": "",
+                "type": "tuple",
+                "internalType": "struct IOrderMixin.Order",
+                "components": [
+                    {
+                        "name": "salt",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "receiver",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "takerAsset",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "makingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "takingAmount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "makerTraits",
+                        "type": "uint256",
+                        "internalType": "MakerTraits"
+                    }
+                ]
+            },
+            {
+                "name": "extension",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "orderHash",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "",
+                "type": "address",
+                "internalType": "address"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "extraData",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "event",
+        "name": "DstEscrowCreated",
+        "inputs": [
+            {
+                "name": "escrow",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            },
+            {
+                "name": "hashlock",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "taker",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "Address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SrcEscrowCreated",
+        "inputs": [
+            {
+                "name": "srcImmutables",
+                "type": "tuple",
+                "indexed": false,
+                "internalType": "struct IBaseEscrow.Immutables",
+                "components": [
+                    {
+                        "name": "orderHash",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "hashlock",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "taker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "token",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "safetyDeposit",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "timelocks",
+                        "type": "uint256",
+                        "internalType": "Timelocks"
+                    }
+                ]
+            },
+            {
+                "name": "dstImmutablesComplement",
+                "type": "tuple",
+                "indexed": false,
+                "internalType": "struct IEscrowFactory.DstImmutablesComplement",
+                "components": [
+                    {
+                        "name": "maker",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "token",
+                        "type": "uint256",
+                        "internalType": "Address"
+                    },
+                    {
+                        "name": "safetyDeposit",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "chainId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    }
+                ]
+            },
+            {
+                "name": "escrow",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "error",
+        "name": "AccessDenied",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "FailedDeployment",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InsufficientBalance",
+        "inputs": [
+            {
+                "name": "balance",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "needed",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ]
+    },
+    {
+        "type": "error",
+        "name": "InsufficientEscrowBalance",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidCreationTime",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidPartialFill",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidProof",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "InvalidSecretsAmount",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "NotEnoughCredit",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OnlyFeeBankAccess",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "OnlyLimitOrderProtocol",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "ResolverCanNotFillOrder",
+        "inputs": []
+    },
+    {
+        "type": "error",
+        "name": "SafeTransferFromFailed",
+        "inputs": []
+    }
+]

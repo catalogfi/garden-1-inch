@@ -4,34 +4,40 @@ use tracing::warn;
 
 /// Configuration for the watcher service.
 /// This struct is used to deserialize the configuration from a TOML file.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatcherConfig {
-    pub core: Core,
-    #[serde(rename = "Rpc")]
-    pub rpc: Rpc,
-    pub contracts: Contracts,
+    pub core: CoreConfig,
+    pub chains: ChainsConfig,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Core {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoreConfig {
     pub db_url: String,
     pub polling_interval: u64,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Rpc {
-    pub ethereum_rpc: String,
-    pub starknet_rpc: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainsConfig {
+    pub evm: Vec<EvmChainConfig>,
+    pub starknet: Vec<StarknetChainConfig>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Contracts {
-    #[serde(rename = "starknet")]
-    pub starknet_contract_address: String,
-    #[serde(rename = "ethereum")]
-    pub ethereum_contract_address: String,
-    pub ethereum_start_block: u64,
-    pub starknet_start_block: u64,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvmChainConfig {
+    pub name: String,
+    pub chain_id: u64,
+    pub rpc_url: String,
+    pub contract_address: String,
+    pub start_block: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StarknetChainConfig {
+    pub name: String,
+    pub chain_id: String,
+    pub rpc_url: String,
+    pub contract_address: String,
+    pub start_block: u64,
 }
 
 impl WatcherConfig {
@@ -77,18 +83,40 @@ mod tests {
             db_url = "postgres://king:mangarock@localhost:5432/wallet_db"
             polling_interval = 5000
 
-            [Rpc]
-            ethereum_rpc = "https://eth.llamarpc.com"
-            starknet_rpc = "https://rpc.starknet.lava.build:443"
+            [[chains.evm]]
+            name = "ethereum"
+            chain_id = 1
+            rpc_url = "https://eth.llamarpc.com"
+            contract_address = "0x7E030bC01EBFca5c1088f7f281D0c73bb8C50D54"
+            start_block = 29182503
 
-            [contracts]
-            # starknet = "0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D"
-            starknet = ""
-            ethereum = "0x230350B554E468E073B1d44Ce7cD4C6d725dd4a5"
-            ethereum_start_block = 23044259
-            # starknet_start_block = 0
-            starknet_start_block = 1661663
+            [[chains.evm]]
+            name = "base"
+            chain_id = 8453
+            rpc_url = "https://base.llamarpc.com"
+            contract_address = "0x1234567890123456789012345678901234567890"
+            start_block = 1000000
 
+            [[chains.evm]]
+            name = "monad"
+            chain_id = 60808
+            rpc_url = "https://testnet1.monad.xyz"
+            contract_address = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+            start_block = 100
+
+            [[chains.starknet]]
+            name = "starknet-mainnet"
+            chain_id = "SN_MAIN"
+            rpc_url = "https://rpc.starknet.lava.build:443"
+            contract_address = "0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D"
+            start_block = 1661663
+              
+            [[chains.starknet]]
+            name = "starknet-sepolia"
+            chain_id = "SN_SEPOLIA"
+            rpc_url = "https://starknet-sepolia.public.blastapi.io/rpc/v0_7"
+            contract_address = "0x1234567890abcdef1234567890abcdef12345678"
+            start_block = 100000
             "#;
 
         let config = WatcherConfig::from_raw_str(toml_content);
@@ -97,17 +125,7 @@ mod tests {
             "postgres://king:mangarock@localhost:5432/wallet_db"
         );
         assert_eq!(config.core.polling_interval, 5000);
-        assert_eq!(config.rpc.ethereum_rpc, "https://eth.llamarpc.com");
-        assert_eq!(
-            config.rpc.starknet_rpc,
-            "https://rpc.starknet.lava.build:443"
-        );
-        assert_eq!(
-            config.contracts.ethereum_contract_address,
-            "0x230350B554E468E073B1d44Ce7cD4C6d725dd4a5"
-        );
-        assert_eq!(config.contracts.ethereum_start_block, 23044259);
-        assert_eq!(config.contracts.starknet_contract_address, "");
-        assert_eq!(config.contracts.starknet_start_block, 1661663);
+        assert_eq!(config.chains.evm.len(), 3);
+        assert_eq!(config.chains.starknet.len(), 2);
     }
 }
