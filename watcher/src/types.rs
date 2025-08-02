@@ -5,6 +5,15 @@ use starknet::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 pub type StarknetClient = JsonRpcClient<HttpTransport>;
 pub type EthereumClient = RootProvider<Ethereum>;
 
+/// Secret entry structure for storing secrets and their hashes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecretEntry {
+    pub index: u32,
+    pub secret: Option<String>,
+    pub secret_hash: String,
+}
+
 #[derive(Debug, Clone)]
 pub enum ChainType {
     Ethereum(String),

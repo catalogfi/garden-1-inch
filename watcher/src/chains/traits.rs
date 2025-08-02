@@ -1,4 +1,5 @@
 use crate::orderbook::provider::OrderbookProvider;
+use alloy::json_abi::JsonAbi;
 use async_trait::async_trait;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -12,6 +13,7 @@ pub trait Chain: Send + Sync + Debug {
         contract_address: String,
         db: Arc<OrderbookProvider>,
         start_block: u64,
+        abi: JsonAbi,
     ) -> anyhow::Result<Self>
     where
         Self: Sized;

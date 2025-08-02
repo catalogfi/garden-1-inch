@@ -5,6 +5,7 @@ pub enum OrderbookError {
     Database(sqlx::Error),
     Validation(String),
     Serialization(String),
+    NotFound(String),
 }
 
 impl fmt::Display for OrderbookError {
@@ -13,6 +14,7 @@ impl fmt::Display for OrderbookError {
             OrderbookError::Database(err) => write!(f, "Database error: {err}"),
             OrderbookError::Validation(msg) => write!(f, "Validation error: {msg}"),
             OrderbookError::Serialization(msg) => write!(f, "Serialization error: {msg}"),
+            OrderbookError::NotFound(msg) => write!(f, "Not Found error: {msg}"),
         }
     }
 }
