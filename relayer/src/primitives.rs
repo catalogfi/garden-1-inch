@@ -3,7 +3,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub enum OrderStatus {
     #[serde(rename = "unmatched")]
     Unmatched,
@@ -31,6 +30,8 @@ pub enum OrderStatus {
     DestinationCanceled,
     #[serde(rename = "expired")]
     Expired,
+    #[serde(rename = "fulfilled")]
+    Fulfilled,
 }
 
 impl sqlx::Type<sqlx::Postgres> for OrderStatus {
@@ -79,12 +80,12 @@ impl std::fmt::Display for OrderStatus {
             OrderStatus::DestinationRefunded => write!(f, "destination_refunded"),
             OrderStatus::SourceCanceled => write!(f, "source_canceled"),
             OrderStatus::DestinationCanceled => write!(f, "destination_canceled"),
+            OrderStatus::Fulfilled => write!(f, "fulfilled"),
         }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub enum OrderType {
     #[serde(rename = "single_fill")]
     SingleFill,
@@ -122,7 +123,6 @@ impl std::fmt::Display for OrderType {
 
 /// Secret entry structure for storing secrets and their hashes
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SecretEntry {
     pub index: u32,
     pub secret: Option<String>,
@@ -131,7 +131,6 @@ pub struct SecretEntry {
 
 /// Order input data structure (user input)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct OrderInput {
     /// Order salt
     pub salt: String,
@@ -159,29 +158,32 @@ fn default_maker_traits() -> String {
 /// Signed order input for cross chain order submission (user input)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedOrderInput {
+    /// Order Hash
+    pub order_hash: String,
     /// Cross chain order data
     pub order: OrderInput,
     /// Source chain id
-    #[serde(rename = "srcChainId")]
     pub src_chain_id: u64,
     /// Destination chain id
-    #[serde(rename = "dstChainId")]
     pub dst_chain_id: u64,
     /// Signature of the cross chain order typed data (using signTypedData v4)
-    pub signature: String,
+    pub signature: serde_json::Value,
     /// An interaction call data. ABI encoded a set of makerAssetSuffix, takerAssetSuffix, makingAmountGetter, takingAmountGetter, predicate, permit, preInteraction, postInteraction
-    pub extension: String,
-    /// Quote id of the quote with presets
-    #[serde(rename = "quoteId")]
-    pub quote_id: String,
+    pub extension: serde_json::Value,
     /// Order type (single fill or multiple fills)
-    #[serde(rename = "orderType")]
     pub order_type: OrderType,
     /// Secret entries containing index, secret, and secret_hash
-    #[serde(default)]
-    pub secrets: Option<Vec<SecretEntry>>,
+    pub secrets: Vec<SecretEntry>,
     /// Deadline by which the order must be filled (Unix timestamp in milliseconds)
     pub deadline: u64,
+    /// Taker address
+    pub taker: String,
+    /// Timelock for the order
+    pub timelock: String,
+    /// Taker traits
+    pub taker_traits: String,
+    /// Args
+    pub args: serde_json::Value,
 }
 
 /// Database model for cross chain orders
@@ -194,14 +196,18 @@ pub struct CrossChainOrder {
     pub dst_chain_id: i64,
     pub maker: String,
     pub receiver: String,
+    pub taker: String,
+    pub timelock: String,
     pub maker_asset: String,
     pub taker_asset: String,
     pub making_amount: BigDecimal,
     pub taking_amount: BigDecimal,
     pub salt: String,
     pub maker_traits: String,
-    pub signature: String,
-    pub extension: String,
+    pub taker_traits: String,
+    pub args: serde_json::Value,
+    pub signature: serde_json::Value,
+    pub extension: serde_json::Value,
     pub order_type: OrderType,
     pub secrets: serde_json::Value,
     pub status: OrderStatus,
@@ -225,19 +231,24 @@ pub struct SecretInput {
     pub order_hash: String,
 }
 
+
 /// Active order output for API responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActiveOrderOutput {
     pub order_hash: String,
-    pub signature: String,
+    pub signature: serde_json::Value,
     pub deadline: u64,
     pub auction_start_date: Option<String>,
     pub auction_end_date: Option<String>,
     pub remaining_maker_amount: String,
-    pub extension: String,
+    pub extension: serde_json::Value,
     pub src_chain_id: u64,
     pub dst_chain_id: u64,
     pub order: OrderInput,
+    pub taker: String,
+    pub timelock: String,
+    pub taker_traits: String,
+    pub args: serde_json::Value,
     pub order_type: OrderType,
     pub secrets: Vec<SecretEntry>,
 }

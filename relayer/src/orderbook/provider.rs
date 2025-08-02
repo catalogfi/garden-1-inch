@@ -68,19 +68,22 @@ impl OrderbookProvider {
             CREATE TABLE orders (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 order_hash VARCHAR(66) UNIQUE NOT NULL,
-                quote_id VARCHAR(255) NOT NULL,
                 src_chain_id BIGINT NOT NULL,
                 dst_chain_id BIGINT NOT NULL,
                 maker VARCHAR(42) NOT NULL,
                 receiver VARCHAR(42) NOT NULL,
+                taker VARCHAR(42) NOT NULL,
+                timelock VARCHAR(255) NOT NULL,
                 maker_asset VARCHAR(42) NOT NULL,
                 taker_asset VARCHAR(42) NOT NULL,
                 making_amount NUMERIC NOT NULL,
                 taking_amount NUMERIC NOT NULL,
                 salt VARCHAR(255) NOT NULL,
                 maker_traits VARCHAR(255) NOT NULL DEFAULT '0',
-                signature TEXT NOT NULL,
-                extension TEXT NOT NULL,
+                taker_traits VARCHAR(255) NOT NULL DEFAULT '0',
+                args JSONB NOT NULL DEFAULT '{}'::jsonb,
+                signature JSONB NOT NULL,
+                extension JSONB NOT NULL,
                 order_type TEXT NOT NULL DEFAULT 'single_fill',
                 secrets JSONB NOT NULL DEFAULT '[]'::jsonb,
                 
@@ -109,6 +112,7 @@ impl OrderbookProvider {
         // Create indexes
         let indexes = vec![
             "CREATE INDEX IF NOT EXISTS idx_orders_maker ON orders(maker)",
+            "CREATE INDEX IF NOT EXISTS idx_orders_taker ON orders(taker)",
             "CREATE INDEX IF NOT EXISTS idx_orders_chain ON orders(src_chain_id)",
             "CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)",
             "CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)",
@@ -136,40 +140,38 @@ impl OrderbookProvider {
         signed_order: &SignedOrderInput,
     ) -> Result<String, OrderbookError> {
         // Generate order hash
-        let order_hash = self.generate_order_hash(signed_order);
-
         // Serialize secrets to JSON
-        let secrets_json = if let Some(ref secrets) = signed_order.secrets {
-            serde_json::to_value(secrets)?
-        } else {
-            serde_json::Value::Array(vec![])
-        };
-
+        let secrets_json = serde_json::to_value(signed_order.secrets.clone())?;
+        let extension_json = serde_json::to_value(signed_order.extension.clone())?;
+        let signature_json = serde_json::to_value(signed_order.signature.clone())?;
         let insert_sql = r#"
             INSERT INTO orders (
-                order_hash, quote_id, src_chain_id, dst_chain_id, maker, receiver,
+                order_hash, src_chain_id, dst_chain_id, maker, receiver, taker, timelock,
                 maker_asset, taker_asset, making_amount, taking_amount,
-                salt, maker_traits, signature, extension, order_type, secrets, status, deadline
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                salt, maker_traits, taker_traits, args, signature, extension, order_type, secrets, status, deadline
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             ON CONFLICT (order_hash) DO NOTHING
             RETURNING id
         "#;
 
         let result = sqlx::query(insert_sql)
-            .bind(order_hash)
-            .bind(&signed_order.quote_id)
+            .bind(&signed_order.order_hash)
             .bind(signed_order.src_chain_id as i64)
             .bind(signed_order.dst_chain_id as i64)
             .bind(&signed_order.order.maker)
             .bind(&signed_order.order.receiver)
+            .bind(&signed_order.taker)
+            .bind(&signed_order.timelock)
             .bind(&signed_order.order.maker_asset)
             .bind(&signed_order.order.taker_asset)
             .bind(&signed_order.order.making_amount)
             .bind(&signed_order.order.taking_amount)
             .bind(&signed_order.order.salt)
             .bind(&signed_order.order.maker_traits)
-            .bind(&signed_order.signature)
-            .bind(&signed_order.extension)
+            .bind(&signed_order.taker_traits)
+            .bind(&signed_order.args)
+            .bind(&signature_json)
+            .bind(&extension_json)
             .bind(&signed_order.order_type.to_string())
             .bind(&secrets_json)
             .bind("unmatched")
@@ -192,15 +194,11 @@ impl OrderbookProvider {
     ) -> Result<Option<CrossChainOrder>, OrderbookError> {
         let query_sql = r#"
             SELECT 
-                id, order_hash, quote_id, src_chain_id, dst_chain_id, maker, receiver,
-                maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits,
+                id, order_hash, src_chain_id, dst_chain_id, maker, receiver, taker, timelock,
+                maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits, taker_traits, args,
                 signature, extension, order_type, secrets, status, deadline, 
-                CASE WHEN auction_start_date IS NOT NULL 
-                     THEN to_char(to_timestamp(auction_start_date / 1000), 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
-                     ELSE NULL END as auction_start_date,
-                CASE WHEN auction_end_date IS NOT NULL 
-                     THEN to_char(to_timestamp(auction_end_date / 1000), 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
-                     ELSE NULL END as auction_end_date,
+                auction_start_date,
+                auction_end_date,
                 src_escrow_address, dst_escrow_address, src_tx_hash,
                 dst_tx_hash, filled_maker_amount, filled_taker_amount,
                 created_at, updated_at
@@ -222,15 +220,11 @@ impl OrderbookProvider {
     ) -> Result<Vec<CrossChainOrder>, OrderbookError> {
         let query_sql = r#"
             SELECT 
-                id, order_hash, quote_id, src_chain_id, dst_chain_id, maker, receiver,
-                maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits,
+                id, order_hash, src_chain_id, dst_chain_id, maker, receiver, taker, timelock,
+                maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits, taker_traits, args,
                 signature, extension, order_type, secrets, status, deadline, 
-                CASE WHEN auction_start_date IS NOT NULL 
-                     THEN to_char(to_timestamp(auction_start_date / 1000), 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
-                     ELSE NULL END as auction_start_date,
-                CASE WHEN auction_end_date IS NOT NULL 
-                     THEN to_char(to_timestamp(auction_end_date / 1000), 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
-                     ELSE NULL END as auction_end_date,
+                auction_start_date,
+                auction_end_date,
                 src_escrow_address, dst_escrow_address, src_tx_hash,
                 dst_tx_hash, filled_maker_amount, filled_taker_amount,
                 created_at, updated_at
@@ -255,15 +249,11 @@ impl OrderbookProvider {
         let orders = sqlx::query_as::<_, CrossChainOrder>(
             r#"
             SELECT 
-                id, order_hash, quote_id, src_chain_id, dst_chain_id, maker, receiver,
-                maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits,
+                id, order_hash, src_chain_id, dst_chain_id, maker, receiver, taker, timelock,
+                maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits, taker_traits, args,
                 signature, extension, order_type, secrets, status, deadline, 
-                CASE WHEN auction_start_date IS NOT NULL 
-                     THEN to_char(to_timestamp(auction_start_date / 1000), 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
-                     ELSE NULL END as auction_start_date,
-                CASE WHEN auction_end_date IS NOT NULL 
-                     THEN to_char(to_timestamp(auction_end_date / 1000), 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
-                     ELSE NULL END as auction_end_date,
+                auction_start_date,
+                auction_end_date,
                 src_escrow_address, dst_escrow_address, src_tx_hash,
                 dst_tx_hash, filled_maker_amount, filled_taker_amount,
                 created_at, updated_at
@@ -291,27 +281,7 @@ impl OrderbookProvider {
         secret: &str,
     ) -> Result<(), OrderbookError> {
         // First, check if the order exists and get its status
-        let order_status_result: Result<String, sqlx::Error> =
-            sqlx::query_scalar("SELECT status FROM orders WHERE order_hash = $1")
-                .bind(order_hash)
-                .fetch_one(&self.pool)
-                .await;
-
-        let order_status = match order_status_result {
-            Ok(status) => status,
-            Err(sqlx::Error::RowNotFound) => {
-                return Err(OrderbookError::Validation("Order not found".to_string()));
-            }
-            Err(e) => return Err(OrderbookError::Database(e)),
-        };
-
-        if order_status != OrderStatus::FinalityConfirmed.to_string() {
-            return Err(OrderbookError::Validation(format!(
-                "Cannot submit secret for order in status: {}",
-                order_status
-            )));
-        }
-
+      
         // Get the current secrets for the order
         let current_secrets_result: Result<serde_json::Value, sqlx::Error> =
             sqlx::query_scalar("SELECT secrets FROM orders WHERE order_hash = $1")

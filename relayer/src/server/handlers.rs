@@ -92,6 +92,10 @@ pub async fn get_active_orders(
                         src_chain_id: order.src_chain_id as u64,
                         dst_chain_id: order.dst_chain_id as u64,
                         order: order_input,
+                        taker: order.taker.clone(),
+                        timelock: order.timelock.clone(),
+                        taker_traits: order.taker_traits.clone(),
+                        args: order.args.clone(),
                         order_type: order.order_type.clone(),
                         secrets,
                     }
@@ -141,7 +145,7 @@ pub async fn submit_order(
         Ok(order_id) => {
             tracing::info!(
                 order_id = order_id,
-                quote_id = signed_order.quote_id,
+                order_hash = signed_order.order_hash,
                 src_chain_id = signed_order.src_chain_id,
                 maker = signed_order.order.maker,
                 "Order Created"
@@ -284,19 +288,10 @@ pub async fn get_secret(
 /// Validate the signed order input
 fn validate_signed_order(signed_order: &SignedOrderInput) -> Result<(), String> {
     // Validate signature format (basic check)
-    if signed_order.signature.is_empty() {
+    if signed_order.signature.is_null() {
         return Err("Signature cannot be empty".to_string());
     }
 
-    // Validate extension format (basic check)
-    if !signed_order.extension.starts_with("0x") {
-        return Err("Extension must be a valid hex string starting with 0x".to_string());
-    }
-
-    // Validate quote ID
-    if signed_order.quote_id.is_empty() {
-        return Err("Quote ID cannot be empty".to_string());
-    }
 
     // Validate order data
     validate_order_input(&signed_order.order)?;
@@ -375,7 +370,6 @@ mod tests {
     /// Utility function to create a test signed order with random hashes
     fn create_test_signed_order() -> SignedOrderInput {
         let random_salt = generate_random_hex(64);
-        let random_quote_id = format!("test_quote_{}", generate_random_hex(16));
         let random_secret_hash1 = generate_random_hex(64);
         let random_secret_hash2 = generate_random_hex(64);
 
@@ -392,9 +386,11 @@ mod tests {
             },
             src_chain_id: 1,
             dst_chain_id: 137,
-            signature: format!("0x{}", generate_random_hex(128)),
-            extension: format!("0x{}", generate_random_hex(16)),
-            quote_id: random_quote_id,
+            signature: serde_json::json!({
+                "r": format!("0x{}", generate_random_hex(128)),
+                "vs": format!("0x{}", generate_random_hex(128)),
+            }), 
+            extension: serde_json::json!({}),
             order_type: OrderType::MultipleFills,
             secrets: Some(vec![
                 SecretEntry {
@@ -409,6 +405,10 @@ mod tests {
                 },
             ]),
             deadline: chrono::Utc::now().timestamp_millis() as u64 + 3600000, // 1 hour from now
+            taker: "0x3333333333333333333333333333333333333333".to_string(),
+            timelock: "0".to_string(),
+            taker_traits: "0".to_string(),
+            args: serde_json::json!({}),
         }
     }
 
