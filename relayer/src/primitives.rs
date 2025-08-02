@@ -3,7 +3,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub enum OrderStatus {
     #[serde(rename = "unmatched")]
     Unmatched,
@@ -31,6 +30,8 @@ pub enum OrderStatus {
     DestinationCanceled,
     #[serde(rename = "expired")]
     Expired,
+    #[serde(rename = "fulfilled")]
+    Fulfilled,
 }
 
 impl sqlx::Type<sqlx::Postgres> for OrderStatus {
@@ -79,12 +80,12 @@ impl std::fmt::Display for OrderStatus {
             OrderStatus::DestinationRefunded => write!(f, "destination_refunded"),
             OrderStatus::SourceCanceled => write!(f, "source_canceled"),
             OrderStatus::DestinationCanceled => write!(f, "destination_canceled"),
+            OrderStatus::Fulfilled => write!(f, "fulfilled"),
         }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub enum OrderType {
     #[serde(rename = "single_fill")]
     SingleFill,
@@ -122,7 +123,6 @@ impl std::fmt::Display for OrderType {
 
 /// Secret entry structure for storing secrets and their hashes
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SecretEntry {
     pub index: u32,
     pub secret: Option<String>,
@@ -131,7 +131,6 @@ pub struct SecretEntry {
 
 /// Order input data structure (user input)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct OrderInput {
     /// Order salt
     pub salt: String,
@@ -162,20 +161,16 @@ pub struct SignedOrderInput {
     /// Cross chain order data
     pub order: OrderInput,
     /// Source chain id
-    #[serde(rename = "srcChainId")]
     pub src_chain_id: u64,
     /// Destination chain id
-    #[serde(rename = "dstChainId")]
     pub dst_chain_id: u64,
     /// Signature of the cross chain order typed data (using signTypedData v4)
     pub signature: String,
     /// An interaction call data. ABI encoded a set of makerAssetSuffix, takerAssetSuffix, makingAmountGetter, takingAmountGetter, predicate, permit, preInteraction, postInteraction
     pub extension: String,
     /// Quote id of the quote with presets
-    #[serde(rename = "quoteId")]
     pub quote_id: String,
     /// Order type (single fill or multiple fills)
-    #[serde(rename = "orderType")]
     pub order_type: OrderType,
     /// Secret entries containing index, secret, and secret_hash
     #[serde(default)]
