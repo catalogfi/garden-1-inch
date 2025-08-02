@@ -62,7 +62,7 @@ mod tests {
 
     use super::*;
     use crate::chains::starknet::StarknetChain;
-    
+
     use std::fs;
     use std::path::Path;
     use std::sync::Arc;
@@ -102,10 +102,10 @@ mod tests {
 
         let mut watcher = FactoryWatcher::new(
             "https://base-sepolia.drpc.org".to_string(),
-            "0xe80CF7Ae2E3Cb8851C8F289bA4d622Cf7B6be5a8".to_string(),
+            "0xAdf0c64ba2A08Bf305474b5bDA7E063428df34aF".to_string(),
             ChainType::Ethereum("base".to_string()),
             db,
-            29191086,
+            29195119,
             &factory_abi,
         )
         .await?;
@@ -128,10 +128,10 @@ mod tests {
 
         let mut watcher = FactoryWatcher::new(
             "https://testnet-rpc.monad.xyz".to_string(),
-            "0x3cbF8736FB94c4aF293aAbF601dAecBdba9f8643".to_string(),
+            "0x77D877f0f43C283448687b619047F80Eb8600b17".to_string(),
             ChainType::Ethereum("monad".to_string()),
             db,
-            28965705,
+            28979120,
             &factory_abi,
         )
         .await?;

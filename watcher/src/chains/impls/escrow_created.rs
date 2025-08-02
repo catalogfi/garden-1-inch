@@ -46,6 +46,7 @@ pub struct DstEscrowCreatedEvent {
     pub escrow_address: String,
     pub hashlock: String,
     pub taker_address: String,
+    pub order_hash: String,
 }
 
 impl EthereumChain {
@@ -116,9 +117,9 @@ impl EthereumChain {
     ) -> anyhow::Result<()> {
         let body = decoded_event.body;
 
-        if body.len() != 3 {
+        if body.len() != 4 {
             return Err(anyhow::anyhow!(
-                "Expected 3 parameters for DstEscrowCreated event, got {}",
+                "Expected 4 parameters for DstEscrowCreated event, got {}",
                 body.len()
             ));
         }
@@ -133,7 +134,7 @@ impl EthereumChain {
 
         self.db
             .handle_escrow_event(
-                &event.hashlock,
+                &event.order_hash,
                 WatcherEventType::DstEscrowCreatedEvent,
                 &event.escrow_address,
                 &hex::encode(block_hash),
@@ -142,8 +143,8 @@ impl EthereumChain {
             .expect("Failed to Update the database");
 
         info!(
-            "Successfully updated database for hashlock: {}",
-            event.hashlock
+            "Successfully updated database for order hash: {}",
+            event.order_hash
         );
 
         Ok(())
@@ -263,9 +264,9 @@ impl ParamTwoTuple {
 
 impl DstEscrowCreatedEvent {
     fn from_decoded_body(body: &[DynSolValue]) -> anyhow::Result<Self> {
-        if body.len() != 3 {
+        if body.len() != 4 {
             return Err(anyhow::anyhow!(
-                "Expected 3 parameters for DstEscrowCreated event, got {}",
+                "Expected 4 parameters for DstEscrowCreated event, got {}",
                 body.len()
             ));
         }
@@ -290,10 +291,16 @@ impl DstEscrowCreatedEvent {
             _ => return Err(anyhow::anyhow!("Parameter 2 should be an address")),
         };
 
+        let order_hash = match &body[3] {
+            DynSolValue::FixedBytes(bytes, _) => hex::encode(bytes),
+            _ => return Err(anyhow::anyhow!("Parameter 3 should be in bytes")),
+        };
+
         Ok(DstEscrowCreatedEvent {
             escrow_address,
             hashlock,
             taker_address,
+            order_hash,
         })
     }
 }
