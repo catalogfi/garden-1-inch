@@ -140,3 +140,4 @@ vite.config.ts.timestamp-i*
 
 #resolver-service
 resolver-service/target
+resolver-service/Settings.toml
