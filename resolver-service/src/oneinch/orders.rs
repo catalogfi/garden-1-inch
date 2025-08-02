@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use reqwest::Client;
@@ -12,7 +14,7 @@ impl OrdersClient {
     /// Create a new orders client
     pub fn new(base_url: String) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder().timeout(Duration::from_secs(10)).build().unwrap(),
             base_url,
         }
     }
@@ -25,12 +27,12 @@ impl OrdersClient {
             .query(&params)
             .send()
             .await?;
-
+        
         if response.status().is_success() {
             let result: ApiResponse<GetActiveOrdersOutput> = response.json().await?;
             match result.status.as_str() {
-                "ok" => Ok(result.result.unwrap()),
-                "error" => Err(anyhow::anyhow!("API Error: {}", result.error.unwrap_or_default())),
+                "Ok" => Ok(result.result.unwrap()),
+                "Error" => Err(anyhow::anyhow!("API Error: {}", result.error.unwrap_or_default())),
                 _ => Err(anyhow::anyhow!("Unknown API status: {}", result.status)),
             }
         } else {
@@ -169,11 +171,10 @@ pub enum OrderStatus {
 
 /// Active order output structure
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct ActiveOrder {
     pub order_hash: String,
     pub signature: String,
-    pub deadline: u64,
+    pub deadline: String,
     pub auction_start_date: Option<String>,
     pub auction_end_date: Option<String>,
     pub remaining_maker_amount: String,
@@ -187,7 +188,6 @@ pub struct ActiveOrder {
 
 /// Meta information for pagination
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Meta {
     pub total_items: u64,
     pub items_per_page: u64,
@@ -197,7 +197,6 @@ pub struct Meta {
 
 /// Get active orders output
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct GetActiveOrdersOutput {
     pub meta: Meta,
     pub items: Vec<ActiveOrder>,

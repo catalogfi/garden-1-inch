@@ -1,23 +1,10 @@
-orders_url = "http://localhost:4455"
+orders_url = "http://0.0.0.0:4455"
 poll_interval = 5
 
-[chains.eth]
+[chains.monad_testnet]
 chain_id = "1"
 chain_type = "evm"
-resolver_contract_address = ""
-provider = ""
-assets = ["ETH", "USDC", "DAI"]
-
-[chains.bsc]
-chain_id = "56"
-chain_type = "evm"
-resolver_contract_address = ""
-provider = ""
-assets = ["BNB", "BUSD", "USDT"]
-
-[chains.polygon]
-chain_id = "137"
-chain_type = "evm"
-resolver_contract_address = ""
-provider = ""
-assets = ["MATIC", "USDC", "DAI"]
+resolver_contract_address = "0xb2e79cd69ee0ba7a431bbab2585ae2bd9019f68c"
+provider = "https://rpc.ankr.com/monad_testnet"
+private_key = "#ENV:ETH_PRIVATE_KEY"
+assets = ["0xEA2bB31EBb0aee264aba3730C8744d6bD76D37d0"]

@@ -3,11 +3,13 @@ use crate::{order_mapper::{OrderAction}, settings::{ChainSettings, ChainType}};
 
 mod evm;
 
+
+
 #[async_trait::async_trait]
 pub trait Resolver: Send + Sync {
-    async fn deploy_escrow(&self, order_action: &OrderAction) -> Result<()>;
-    async fn release_funds(&self, order_action: &OrderAction) -> Result<()>;
-    async fn refund_funds(&self, order_action: &OrderAction) -> Result<()>;
+    async fn deploy_src_escrow(&self, order_action: &OrderAction) -> Result<()>;
+    async fn deploy_dest_escrow(&self, order_action: &OrderAction) -> Result<()>;
+    async fn arbitrary_calls(&self, order_action: &OrderAction) -> Result<()>;
 }
 
 pub async fn create_resolver(chain_settings: &ChainSettings) -> Box<dyn Resolver + Send + Sync> {

@@ -3,8 +3,7 @@ use anyhow::Result;
 use moka::future::Cache;
 use tokio::time::sleep;
 
-use crate::oneinch::orders::{ActiveOrdersParams, OrderStatus, OrdersClient, ActiveOrder, OrderDetail};
-use crate::resolver::Resolver;
+use crate::{oneinch::orders::{ActiveOrder, ActiveOrdersParams, OrderDetail, OrderStatus, OrdersClient}, resolver::Resolver};
 
 #[derive(Debug)]
 pub struct OrderAction {
@@ -15,9 +14,9 @@ pub struct OrderAction {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ActionType {
-    DeployEscrow,
-    ReleaseFunds,
-    RefundFunds,
+    DeploySrcEscrow,
+    DeployDestEscrow,
+    ArbitraryCalls,
     NoOp,
 }
 
@@ -133,17 +132,17 @@ impl OrderMapper {
         };
 
         match action_type {
-            ActionType::DeployEscrow => {
+            ActionType::DeploySrcEscrow => {
                 tracing::debug!(order_id=?order.order_hash, "Executing deploy escrow action");
-                resolver.deploy_escrow(&action).await
+                resolver.deploy_src_escrow(&action).await
             }
-            ActionType::ReleaseFunds => {
-                tracing::debug!(order_id=?order.order_hash, "Executing release funds action");
-                resolver.release_funds(&action).await
+            ActionType::DeployDestEscrow => {
+                tracing::debug!(order_id=?order.order_hash, "Executing deploy escrow action");
+                resolver.deploy_dest_escrow(&action).await
             }
-            ActionType::RefundFunds => {
-                tracing::debug!(order_id=?order.order_hash, "Executing refund funds action");
-                resolver.refund_funds(&action).await
+            ActionType::ArbitraryCalls => {
+                tracing::debug!(order_id=?order.order_hash, "Executing arbitrary calls action");
+                resolver.arbitrary_calls(&action).await
             }
             ActionType::NoOp => {
                 tracing::debug!(order_id=?order.order_hash, "No action needed");
@@ -264,19 +263,19 @@ impl OrderMapper {
 
     fn determine_action(&self, order: &OrderDetail) -> (ActionType, ActionType) {
         match order.status {
-            OrderStatus::Unmatched => (ActionType::DeployEscrow, ActionType::NoOp),
-            OrderStatus::SourceFilled => (ActionType::NoOp, ActionType::DeployEscrow),
-            OrderStatus::DestinationFilled => (ActionType::ReleaseFunds, ActionType::NoOp),
-            OrderStatus::SourceWithdrawPending => (ActionType::ReleaseFunds, ActionType::NoOp),
-            OrderStatus::DestinationWithdrawPending => (ActionType::NoOp, ActionType::ReleaseFunds),
-            OrderStatus::SourceSettled => (ActionType::NoOp, ActionType::ReleaseFunds),
-            OrderStatus::DestinationSettled => (ActionType::NoOp, ActionType::NoOp), // marks finality of the order
-            OrderStatus::Expired => (ActionType::RefundFunds, ActionType::RefundFunds),
-            OrderStatus::SourceCanceled => (ActionType::NoOp, ActionType::RefundFunds),
-            OrderStatus::DestinationCanceled => (ActionType::NoOp, ActionType::RefundFunds),
-            OrderStatus::DestinationRefunded => (ActionType::NoOp, ActionType::RefundFunds),
-            OrderStatus::SourceRefunded => (ActionType::NoOp, ActionType::NoOp), // marks finality of the order
-            OrderStatus::FinalityConfirmed => (ActionType::NoOp, ActionType::NoOp), // secrets can be submitted
+            OrderStatus::Unmatched => (ActionType::DeploySrcEscrow, ActionType::NoOp),
+            OrderStatus::SourceFilled => (ActionType::NoOp, ActionType::DeploySrcEscrow),
+            OrderStatus::DestinationFilled => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::SourceWithdrawPending => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::DestinationWithdrawPending => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::SourceSettled => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::DestinationSettled => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::Expired => (ActionType::ArbitraryCalls, ActionType::ArbitraryCalls),
+            OrderStatus::SourceCanceled => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::DestinationCanceled => (ActionType::NoOp, ActionType::ArbitraryCalls),
+            OrderStatus::DestinationRefunded => (ActionType::NoOp, ActionType::ArbitraryCalls),
+            OrderStatus::SourceRefunded => (ActionType::NoOp, ActionType::NoOp),
+            OrderStatus::FinalityConfirmed => (ActionType::NoOp, ActionType::NoOp),
         }
     }
 }
