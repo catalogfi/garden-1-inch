@@ -43,7 +43,7 @@ impl FactoryWatcher {
     }
 
     pub async fn start(&mut self) -> anyhow::Result<()> {
-        info!("Starting {} watcher service", self.chain_name);
+        info!("🚀 Starting {} watcher service", self.chain_name);
 
         match &mut self.chain {
             ChainWatcher::Ethereum(chain) => chain.start().await,

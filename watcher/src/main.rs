@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::fs;
 use std::sync::Arc;
 use std::{env, path::Path};
+use tracing_subscriber::fmt::format::FmtSpan;
 use watcher::watchers::escrow_monitor::EscrowMonitor;
 use watcher::{
     config::WatcherConfig, orderbook::provider::OrderbookProvider, server::Server,
@@ -11,7 +12,12 @@ use watcher::{
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_target(true)
+        .with_level(true)
+        .with_span_events(FmtSpan::CLOSE)
+        .compact()
+        .init();
     let config = load_config();
 
     let db = init_db(&config.core.db_url)
@@ -78,7 +84,7 @@ async fn start_factory_watchers(
 
     for starknet_config in config.chains.starknet {
         if !starknet_config.rpc_url.is_empty() && !starknet_config.contract_address.is_empty() {
-            tracing::info!("Initializing {} factory watcher", starknet_config.name);
+            tracing::info!("⏳ Initializing {} factory watcher", starknet_config.name);
             let json_abi = load_abi(Path::new("src/abi/escrow_factory.json"))?;
 
             let watcher = FactoryWatcher::new(
@@ -104,7 +110,7 @@ async fn start_factory_watchers(
         });
     }
 
-    tracing::info!("All factory watchers started successfully");
+    tracing::info!("✅ All factory watchers started successfully");
     Ok(())
 }
 
@@ -112,7 +118,7 @@ async fn start_escrow_monitor(
     config: WatcherConfig,
     db: Arc<OrderbookProvider>,
 ) -> anyhow::Result<()> {
-    tracing::info!("Starting escrow monitor service");
+    tracing::info!("🚀 Starting escrow monitor service");
     let escrow_abi = load_abi(Path::new("src/abi/escrow_src.json"))?;
 
     let start_block = config
@@ -132,7 +138,7 @@ async fn start_escrow_monitor(
         }
     });
 
-    tracing::info!("Escrow monitor started successfully");
+    tracing::info!("✅ Escrow monitor started successfully");
     Ok(())
 }
 pub fn load_abi(path: &Path) -> anyhow::Result<JsonAbi> {

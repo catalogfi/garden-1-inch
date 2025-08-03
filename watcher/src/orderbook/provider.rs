@@ -295,13 +295,13 @@ impl OrderbookProvider {
         };
 
         if result.rows_affected() == 0 {
-            tracing::warn!(
-                "No rows updated for order_hash: {} - order may not exist in database",
-                order_hash
-            );
+            // tracing::warn!(
+            //     "No rows updated for order_hash: {} - order may not exist in database",
+            //     order_hash
+            // );
         } else {
             tracing::info!(
-                "Successfully updated order {} with status {} and escrow address {} and tx hash {}",
+                "💾 Successfully updated order {} with status {} and escrow address {} and tx hash {}",
                 order_hash,
                 status.to_string(),
                 escrow_address,
@@ -339,13 +339,13 @@ impl OrderbookProvider {
             .await?;
 
         if result.rows_affected() == 0 {
-            tracing::warn!(
-                "No rows updated for order_hash: {} - order may not exist in database",
-                order_hash
-            );
+            // tracing::warn!(
+            //     "No rows updated for order_hash: {} - order may not exist in database",
+            //     order_hash
+            // );
         } else {
             tracing::info!(
-                "Successfully updated order {} with status {}",
+                "💾 Successfully updated order {} with status {}",
                 order_hash,
                 status.to_string(),
             );

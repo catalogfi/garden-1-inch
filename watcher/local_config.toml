@@ -13,7 +13,7 @@ start_block = 29224875
 [[chains.evm]]
 name = "monad"
 chain_id = 10143
-rpc_url = "https://rpc.ankr.com/monad_testnet"
+rpc_url = "https://testnet-rpc.monad.xyz"
 contract_address = "0xa62dF4c42fFd8a352436461f3A3542bF2EFb06bF"
 start_block = 29078662
 

@@ -69,7 +69,7 @@ impl EscrowMonitor {
     }
 
     pub async fn start(&mut self) -> anyhow::Result<()> {
-        info!("Starting escrow monitor service");
+        info!("🚀 Starting escrow monitor service");
 
         let mut monitor_interval = interval(Duration::from_secs(ESCROW_MONITOR_INTERVAL));
 
@@ -91,7 +91,7 @@ impl EscrowMonitor {
             .map_err(|e| anyhow::anyhow!("Unable to get escrow addresses by chain: {}", e))?;
 
         if escrow_data_by_chain.is_empty() {
-            info!("No pending escrows to monitor");
+            info!("🟢 No pending escrows to monitor");
             return Ok(());
         }
 

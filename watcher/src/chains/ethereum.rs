@@ -56,7 +56,7 @@ impl Chain for EthereumChain {
 
     async fn start(&mut self) -> anyhow::Result<()> {
         info!(
-            "Starting Ethereum watcher for contract: {}",
+            "🚀 Starting Ethereum watcher for contract: {}",
             self.contract_address
         );
 
@@ -72,7 +72,7 @@ impl Chain for EthereumChain {
         let latest_block = self.client.get_block_number().await?;
         let from_block = self.last_block.unwrap_or(self.start_block);
 
-        info!("Latest block: {}", latest_block);
+        info!("📦 Latest block: {}", latest_block);
 
         if from_block >= latest_block {
             info!(
@@ -83,7 +83,7 @@ impl Chain for EthereumChain {
         }
 
         info!(
-            "Polling contract {} from block {} to {}",
+            "🔍 Polling contract {} from block {} to {}",
             self.contract_address, from_block, latest_block
         );
 
@@ -143,11 +143,11 @@ impl Chain for EthereumChain {
     }
 
     async fn process_log(&self, log: Log) -> anyhow::Result<()> {
-        info!("Processing log: {:#?}", log);
+        // info!("Processing log: {:#?}", log);
 
         match decode_log_with_abi(&self.abi, &log)? {
             Some((event_name, decoded_event)) => {
-                info!("Found event: {}", event_name);
+                info!("📥  Found event: {}", event_name);
 
                 match event_name.as_str() {
                     "SrcEscrowCreated" => {

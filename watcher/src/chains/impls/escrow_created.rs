@@ -87,7 +87,7 @@ impl EthereumChain {
             param_three: param_three.clone(),
         };
 
-        info!("Parsed SrcEscrowCreated event: {:#?}", event);
+        // info!("Parsed SrcEscrowCreated event: {:#?}", event);
         let block_hash = log
             .block_hash
             .ok_or_else(|| anyhow::anyhow!("Missing block_hash"))?;
@@ -104,7 +104,7 @@ impl EthereumChain {
             .expect("Failed to Update the database");
 
         info!(
-            "Successfully updated database for order hash: {}",
+            "💾 Successfully updated database for order hash: {}",
             event.param_one.order_hash
         );
 
@@ -127,7 +127,7 @@ impl EthereumChain {
 
         let event = DstEscrowCreatedEvent::from_decoded_body(&body)?;
 
-        info!("Parsed DstEscrowCreated event: {:#?}", event);
+        // info!("Parsed DstEscrowCreated event: {:#?}", event);
 
         let block_hash = log
             .block_hash
@@ -145,7 +145,7 @@ impl EthereumChain {
             .expect("Failed to Update the database");
 
         info!(
-            "Successfully updated database for order_hash: {}",
+            "💾 Successfully updated database for order_hash: {}",
             event.order_hash
         );
 

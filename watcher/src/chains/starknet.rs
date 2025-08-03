@@ -8,7 +8,7 @@ use starknet::{
 };
 use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::time::sleep;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 const MAX_BLOCK_SPAN: u64 = 1000;
 const POLLING_INTERVAL: u64 = 5;
@@ -47,7 +47,7 @@ impl Chain for StarknetChain {
 
     async fn start(&mut self) -> anyhow::Result<()> {
         info!(
-            "Starting Starknet watcher for contract: {}",
+            "🚀 Starting Starknet watcher for contract: {}",
             self.contract_address
         );
 
@@ -63,7 +63,7 @@ impl Chain for StarknetChain {
         let latest_block = self.client.block_hash_and_number().await?.block_number;
         let from_block = self.last_block.unwrap_or(self.start_block);
 
-        info!("Latest block: {}", latest_block);
+        info!("📦 Latest block: {}", latest_block);
 
         if from_block >= latest_block {
             info!(
