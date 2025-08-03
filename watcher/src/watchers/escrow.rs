@@ -6,7 +6,6 @@ use crate::{
 };
 use alloy::{
     json_abi::JsonAbi,
-    primitives::Address,
     providers::Provider,
     rpc::types::{Filter, Log},
 };
@@ -68,7 +67,7 @@ impl EscrowWatcher {
     pub async fn get_block_number(&self) -> anyhow::Result<u64> {
         match &self.chain {
             ChainWatcher::Ethereum(chain) => Ok(chain.client.get_block_number().await?),
-            ChainWatcher::Starknet(chain) => {
+            ChainWatcher::Starknet(_chain) => {
                 // You'll need to implement this for Starknet
                 // For now, return a placeholder
                 Ok(0)
@@ -90,7 +89,7 @@ impl EscrowWatcher {
     pub async fn process_log(&self, log: Log) -> anyhow::Result<()> {
         match &self.chain {
             ChainWatcher::Ethereum(chain) => chain.process_log(log).await,
-            ChainWatcher::Starknet(chain) => Ok(()),
+            ChainWatcher::Starknet(_chain) => Ok(()),
         }
     }
 

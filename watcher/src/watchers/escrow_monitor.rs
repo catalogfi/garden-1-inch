@@ -11,10 +11,7 @@ use tokio::time::interval;
 use tracing::{error, info, warn};
 
 use crate::{
-    chains::{
-        ethereum::decode_log_with_abi,
-        impls::withdrawal::{ParamOne, WithdrawalEvent},
-    },
+    chains::ethereum::decode_log_with_abi,
     config::WatcherConfig,
     orderbook::provider::OrderbookProvider,
     types::{ChainType, OrderStatus},
@@ -119,6 +116,7 @@ impl EscrowMonitor {
 
         Ok(())
     }
+
     async fn monitor_chain_escrows(
         &self,
         chain: &EscrowWatcher,
@@ -141,16 +139,11 @@ impl EscrowMonitor {
 
             let should_monitor = match order_status.as_str() {
                 "source_settled" => {
-                    let is_destination = self
-                        .db
+                    self.db
                         .is_escrow_destination(order_hash, escrow_addr)
-                        .await?;
-                    is_destination
+                        .await?
                 }
-                "destination_settled" => {
-                    let is_source = self.db.is_escrow_source(order_hash, escrow_addr).await?;
-                    is_source
-                }
+                "destination_settled" => self.db.is_escrow_source(order_hash, escrow_addr).await?,
                 "source_filled" | "destination_filled" => true,
                 _ => false,
             };
@@ -200,7 +193,7 @@ impl EscrowMonitor {
         while from_block <= latest_block {
             let to_block = std::cmp::min(from_block + max_spam - 1, latest_block);
 
-            info!("Querying blocks {} to {}", from_block, to_block);
+            // info!("Querying blocks {} to {}", from_block, to_block);
 
             let filter = Filter::new()
                 .from_block(from_block)
@@ -271,13 +264,13 @@ impl EscrowMonitor {
 
     async fn handle_withdrawn_event(
         &self,
-        chain: &EscrowWatcher,
+        _chain: &EscrowWatcher,
         log: &Log,
         active_escrows: &[(String, String)],
         chain_id: String,
     ) -> anyhow::Result<()> {
         // Decode the log using the escrow ABI
-        let decoded = decode_log_with_abi(&self.escrow_abi, &log)
+        let decoded = decode_log_with_abi(&self.escrow_abi, log)
             .map_err(|e| anyhow::anyhow!("Failed to decode log: {}", e))?;
 
         let (event_name, decoded_event) = match decoded {
@@ -306,7 +299,7 @@ impl EscrowMonitor {
 
         let event_order_hash = match &body[1] {
             DynSolValue::FixedBytes(order_hash_bytes, _) => {
-                format!("{}", hex::encode(order_hash_bytes))
+                hex::encode(order_hash_bytes).to_string()
             }
             _ => return Err(anyhow::anyhow!("Parameter 1 should be FixedBytes")),
         };
@@ -320,32 +313,38 @@ impl EscrowMonitor {
             .map(|(_, hash)| hash)
             .ok_or_else(|| anyhow::anyhow!("No matching order hash found for escrow address"))?;
 
-        // // Verify the order hash matches the event's order hash
-        // if order_hash != &event_order_hash {
-        //     return Err(anyhow::anyhow!(
-        //         "Order hash mismatch: expected {}, got {}",
-        //         order_hash,
-        //         event_order_hash
-        //     ));
-        // }
-        let status = self
+        // Get current status before updating
+        let current_status = self.db.get_order_status(order_hash).await?;
+
+        let withdrawal_status = self
             .db
             .determine_withdrawal_status(&event_order_hash, &escrow_address)
             .await?;
 
+        // Check if we should directly mark as fulfilled
+        let final_status = match (&withdrawal_status, current_status.as_str()) {
+            (OrderStatus::SourceSettled, "destination_settled") => OrderStatus::FulFilled,
+            (OrderStatus::DestinationSettled, "source_settled") => OrderStatus::FulFilled,
+            _ => withdrawal_status,
+        };
+
         self.db
-            .update_order_status(&order_hash, status)
+            .update_order_status(order_hash, final_status.clone())
             .await
             .map_err(|e| anyhow::anyhow!("Failed to update status: {}", e))?;
 
-        if self.db.is_order_fully_complete(&order_hash).await? {
+        // Mark as completed if fulfilled
+        if final_status.to_string() == "fulfilled" {
             let mut completed = self.completed_orders.write().await;
             completed.insert(order_hash.clone());
+            info!("Order {} is now FULFILLED - marked as complete", order_hash);
         }
 
         info!(
-            "Successfully processed withdrawal for order hash: {} on chain {}",
-            event_order_hash, chain_id
+            "Successfully processed withdrawal for order hash: {} on chain {} with status: {}",
+            event_order_hash,
+            chain_id,
+            final_status.to_string()
         );
 
         Ok(())

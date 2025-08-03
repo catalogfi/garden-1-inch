@@ -8,7 +8,7 @@ use starknet::{
 };
 use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 const MAX_BLOCK_SPAN: u64 = 1000;
 const POLLING_INTERVAL: u64 = 5;
@@ -77,6 +77,11 @@ impl Chain for StarknetChain {
         while current_block < latest_block {
             let next_block = std::cmp::min(current_block + MAX_BLOCK_SPAN, latest_block);
 
+            info!(
+                "🔍 Fetching events from block {} to block {}",
+                current_block, next_block
+            );
+
             let contract_felt = Felt::from_str(&self.contract_address)?;
             let filter = EventFilter {
                 from_block: Some(BlockId::Number(current_block)),
@@ -86,6 +91,7 @@ impl Chain for StarknetChain {
             };
 
             let mut continuation_token: Option<String> = None;
+            let mut total_events_in_range = 0;
 
             loop {
                 let events = self
@@ -97,12 +103,35 @@ impl Chain for StarknetChain {
                     break;
                 }
 
+                total_events_in_range += events.events.len();
+
                 info!(
-                    events_count = %events.events.len(),
-                    from_block = %current_block,
-                    to_block = %next_block,
-                    "found events",
+                    "📦 Found {} events in this batch (total so far: {})",
+                    events.events.len(),
+                    total_events_in_range
                 );
+
+                // Print detailed information about each event
+                for (i, event) in events.events.iter().enumerate() {
+                    info!("\n=== EVENT #{} ===", i + 1);
+                    info!("Block Number: {:?}", event.block_number);
+                    info!("Block Hash: {:?}", event.block_hash);
+                    info!("Transaction Hash: {:?}", event.transaction_hash);
+                    info!("From Address: {:?}", event.from_address);
+
+                    info!("Keys ({} total):", event.keys.len());
+                    for (key_idx, key) in event.keys.iter().enumerate() {
+                        info!("  Key[{}]: {}", key_idx, key);
+                        info!("  Key[{}] (hex): {:#x}", key_idx, key);
+                    }
+
+                    info!("Data ({} total):", event.data.len());
+                    for (data_idx, data) in event.data.iter().enumerate() {
+                        info!("  Data[{}]: {}", data_idx, data);
+                        info!("  Data[{}] (hex): {:#x}", data_idx, data);
+                    }
+                    info!("================\n");
+                }
 
                 for event in events.events {
                     self.process_log(event).await?;
@@ -112,6 +141,18 @@ impl Chain for StarknetChain {
                 if continuation_token.is_none() {
                     break;
                 }
+            }
+
+            if total_events_in_range == 0 {
+                info!(
+                    "❌ No events found in block range {} to {}",
+                    current_block, next_block
+                );
+            } else {
+                info!(
+                    "✅ Processed {} total events in block range {} to {}",
+                    total_events_in_range, current_block, next_block
+                );
             }
 
             current_block = next_block + 1;
@@ -142,6 +183,7 @@ impl Chain for StarknetChain {
             .block_number
             .ok_or_else(|| anyhow::anyhow!("Event missing block number"))?;
 
+        info!("🚀 PROCESSING EVENT: Block {}", block_number);
         let timestamp = self.get_block_timestamp(block_number).await?;
 
         info!(
@@ -149,26 +191,58 @@ impl Chain for StarknetChain {
             block_number, timestamp, event.block_hash
         );
 
-        // // Match on event keys to determine event type
-        // if let Some(keys) = event.keys.first() {
-        //     match keys.to_string().as_str() {
-        //         // Add your Starknet event selectors here
-        //         // Example:
-        //         "0x1234..." => {
-        //             self.db
-        //                 .handle_escrow_event(
-        //                     &event.transaction_hash.to_string(),
-        //                     WatcherEventType::SourceEscrowCreated,
-        //                     &self.contract_address,
-        //                 )
-        //                 .await?;
-        //         }
-        //         // Add more event handlers here
-        //         _ => {
-        //             info!("Unknown event key: {:?}", keys);
-        //         }
-        //     }
-        // }
+        // Decode and print event data
+        if let Some(event_selector) = event.keys.first() {
+            info!("\n🔍 DECODED EVENT:");
+            info!("Event Selector: {:#x}", event_selector);
+
+            match event_selector.to_string().as_str() {
+                "0xf323845026b2be2da82fc16476961f810f279069ce9e128eabc1023a87ade0" => {
+                    info!("Event Type: Created");
+
+                    if event.data.len() >= 5 {
+                        let order_hash = &event.data[0];
+                        let secret_hash_part1 = &event.data[1];
+                        let secret_hash_part2 = &event.data[2];
+                        let amount_low = &event.data[3];
+                        let amount_high = &event.data[4];
+
+                        info!("📋 Decoded Fields:");
+                        info!("  order_hash: {:#x}", order_hash);
+                        info!("  secret_hash[0-3]: {:#x}", secret_hash_part1);
+                        info!("  secret_hash[4-7]: {:#x}", secret_hash_part2);
+                        info!("  amount (low): {} (decimal: {})", amount_low, amount_low);
+                        info!(
+                            "  amount (high): {} (decimal: {})",
+                            amount_high, amount_high
+                        );
+
+                        // Calculate full u256 amount
+                        let amount_low_u128 = amount_low.to_string().parse::<u128>().unwrap_or(0);
+                        let amount_high_u128 = amount_high.to_string().parse::<u128>().unwrap_or(0);
+
+                        if amount_high_u128 == 0 {
+                            info!("  💰 Total Amount: {}", amount_low_u128);
+                        } else {
+                            info!(
+                                "  💰 Total Amount: {} + ({} << 128)",
+                                amount_low_u128, amount_high_u128
+                            );
+                        }
+                    } else {
+                        info!("❌ Insufficient data fields for Created event");
+                    }
+                }
+                _ => {
+                    info!("❓ Unknown event selector: {:#x}", event_selector);
+                    info!("Data fields:");
+                    for (i, data) in event.data.iter().enumerate() {
+                        info!("  data[{}]: {:#x} (decimal: {})", i, data, data);
+                    }
+                }
+            }
+        }
+        info!("=====================================\n");
 
         Ok(())
     }

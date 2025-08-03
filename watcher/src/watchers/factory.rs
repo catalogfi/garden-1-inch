@@ -169,7 +169,7 @@ mod tests {
     #[tokio::test]
     async fn test_starknet_chain() -> anyhow::Result<()> {
         tracing_subscriber::fmt::init();
-        let db_url = "postgres://king:mangarock@localhost:5432/wallet_db";
+        let db_url = "postgresql://postgres:e4cqtvu2sHlmwEuy5wSG2ZkINrnxyLNSWpLikE8szXPly4X2NqWfkFKp48y3KKQn@162.55.81.185:3129/postgres";
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(5)
             .connect(db_url)
@@ -179,10 +179,10 @@ mod tests {
         let json_abi: JsonAbi = load_abi(Path::new("src/abi/escrow_factory.json"))?;
 
         let mut chain = StarknetChain::new(
-            "https://rpc.starknet.lava.build:443".to_string(),
-            "0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D".to_string(),
+            "https://starknet-sepolia.public.blastapi.io".to_string(),
+            "0x04688ecf254dfa78275085ed99f1565bc72832c3ec92fe0e4d733e3978b007f4".to_string(),
             db,
-            1661663,
+            1342901,
             json_abi,
         )
         .await?;

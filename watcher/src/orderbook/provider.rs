@@ -153,6 +153,16 @@ impl OrderbookProvider {
         let normalized_order_hash = self.normalize_order_hash(order_hash);
         let normalized_escrow = self.normalize_address(escrow_address);
 
+        // Get current status first for withdrawal events
+        let current_status = if matches!(
+            event_type,
+            WatcherEventType::SourceWithdraw | WatcherEventType::DestinationWithdraw
+        ) {
+            Some(self.get_order_status(order_hash).await?)
+        } else {
+            None
+        };
+
         let (status, address_field, tx_hash_field, log_field, should_update_log) = match event_type
         {
             WatcherEventType::SrcEscrowCreatedEvent => (
@@ -169,20 +179,66 @@ impl OrderbookProvider {
                 "dest_event",
                 true,
             ),
-            WatcherEventType::SourceWithdraw => (
-                OrderStatus::SourceSettled,
-                "src_escrow_address",
-                "src_tx_hash",
-                "",
-                false,
-            ),
-            WatcherEventType::DestinationWithdraw => (
-                OrderStatus::DestinationSettled,
-                "dst_escrow_address",
-                "dst_tx_hash",
-                "",
-                false,
-            ),
+            WatcherEventType::SourceWithdraw => {
+                // Check if destination is already settled
+                if let Some(ref current) = current_status {
+                    if current == "destination_settled" {
+                        (
+                            OrderStatus::FulFilled,
+                            "src_escrow_address",
+                            "src_tx_hash",
+                            "",
+                            false,
+                        )
+                    } else {
+                        (
+                            OrderStatus::SourceSettled,
+                            "src_escrow_address",
+                            "src_tx_hash",
+                            "",
+                            false,
+                        )
+                    }
+                } else {
+                    (
+                        OrderStatus::SourceSettled,
+                        "src_escrow_address",
+                        "src_tx_hash",
+                        "",
+                        false,
+                    )
+                }
+            }
+            WatcherEventType::DestinationWithdraw => {
+                // Check if source is already settled
+                if let Some(ref current) = current_status {
+                    if current == "source_settled" {
+                        (
+                            OrderStatus::FulFilled,
+                            "dst_escrow_address",
+                            "dst_tx_hash",
+                            "",
+                            false,
+                        )
+                    } else {
+                        (
+                            OrderStatus::DestinationSettled,
+                            "dst_escrow_address",
+                            "dst_tx_hash",
+                            "",
+                            false,
+                        )
+                    }
+                } else {
+                    (
+                        OrderStatus::DestinationSettled,
+                        "dst_escrow_address",
+                        "dst_tx_hash",
+                        "",
+                        false,
+                    )
+                }
+            }
             WatcherEventType::SourceRescue => (
                 OrderStatus::SourceRefunded,
                 "src_escrow_address",
@@ -202,18 +258,18 @@ impl OrderbookProvider {
         let query = if should_update_log {
             format!(
                 r#"
-        UPDATE orders 
-        SET status = $1, {address_field} = $2, {tx_hash_field} = $4, {log_field} = $5, updated_at = NOW()
-        WHERE order_hash = $3
-        "#,
+            UPDATE orders 
+            SET status = $1, {address_field} = $2, {tx_hash_field} = $4, {log_field} = $5, updated_at = NOW()
+            WHERE order_hash = $3
+            "#,
             )
         } else {
             format!(
                 r#"
-        UPDATE orders 
-        SET status = $1, {address_field} = $2, {tx_hash_field} = $4, updated_at = NOW()
-        WHERE order_hash = $3
-        "#,
+            UPDATE orders 
+            SET status = $1, {address_field} = $2, {tx_hash_field} = $4, updated_at = NOW()
+            WHERE order_hash = $3
+            "#,
             )
         };
 
@@ -251,10 +307,19 @@ impl OrderbookProvider {
                 escrow_address,
                 block_hash
             );
+
+            // Log if order was marked as fulfilled
+            if status.to_string() == "fulfilled" {
+                tracing::info!(
+                    "Order {} has been marked as FULFILLED due to both settlements complete",
+                    order_hash
+                );
+            }
         }
 
         Ok(())
     }
+
     pub async fn update_order_status(
         &self,
         order_hash: &str,
@@ -495,13 +560,17 @@ impl OrderbookProvider {
             Ok(false) // Order not found, consider it not complete
         }
     }
-
-    /// Alternative method to check if order is complete by checking both escrow statuses
     pub async fn is_order_fully_complete(&self, order_hash: &str) -> Result<bool, OrderbookError> {
         let query = r#"
         SELECT 
-            (src_escrow_address IS NULL OR status = 'source_settled') AS src_settled,
-            (dst_escrow_address IS NULL OR status = 'destination_settled') AS dst_settled
+            status,
+            src_escrow_address IS NOT NULL as has_src_escrow,
+            dst_escrow_address IS NOT NULL as has_dst_escrow,
+            (SELECT COUNT(*) FROM (
+                SELECT 1 WHERE src_escrow_address IS NOT NULL
+                UNION ALL
+                SELECT 1 WHERE dst_escrow_address IS NOT NULL
+            ) as escrow_count) as total_escrows
         FROM orders 
         WHERE order_hash = $1
     "#;
@@ -513,9 +582,74 @@ impl OrderbookProvider {
 
         match row {
             Some(row) => {
-                let src_settled: bool = row.get("src_settled");
-                let dst_settled: bool = row.get("dst_settled");
-                Ok(src_settled && dst_settled)
+                let status: String = row.get("status");
+                let has_src_escrow: bool = row.get("has_src_escrow");
+                let has_dst_escrow: bool = row.get("has_dst_escrow");
+
+                // If already fulfilled, return true
+                if status == "fulfilled" {
+                    return Ok(true);
+                }
+
+                // Check if both escrows are settled
+                let src_settled = !has_src_escrow || status == "source_settled";
+                let dst_settled = !has_dst_escrow || status == "destination_settled";
+
+                Ok(src_settled && dst_settled && (has_src_escrow || has_dst_escrow))
+            }
+            None => Ok(false), // Order not found
+        }
+    }
+
+    pub async fn check_and_update_fulfilled_status(
+        &self,
+        order_hash: &str,
+    ) -> Result<bool, OrderbookError> {
+        let query = r#"
+        SELECT 
+            status,
+            src_escrow_address,
+            dst_escrow_address
+        FROM orders 
+        WHERE order_hash = $1
+    "#;
+
+        let row = sqlx::query(query)
+            .bind(self.normalize_order_hash(order_hash))
+            .fetch_optional(&self.pool)
+            .await?;
+
+        match row {
+            Some(row) => {
+                let current_status: String = row.get("status");
+                let src_escrow: Option<String> = row.get("src_escrow_address");
+                let dst_escrow: Option<String> = row.get("dst_escrow_address");
+
+                // If already fulfilled, return true
+                if current_status == "fulfilled" {
+                    return Ok(true);
+                }
+
+                // Check if both escrows exist and are settled
+                let both_settled = match (src_escrow.is_some(), dst_escrow.is_some()) {
+                    (true, true) => {
+                        // Both escrows exist, check if both are settled
+                        current_status == "source_settled"
+                            || current_status == "destination_settled"
+                    }
+                    (true, false) => current_status == "source_settled",
+                    (false, true) => current_status == "destination_settled",
+                    (false, false) => false, // No escrows, can't be fulfilled
+                };
+
+                if both_settled {
+                    // Update to fulfilled status
+                    self.update_order_status(order_hash, OrderStatus::FulFilled)
+                        .await?;
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
             }
             None => Ok(false), // Order not found
         }
