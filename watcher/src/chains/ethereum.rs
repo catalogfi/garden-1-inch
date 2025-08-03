@@ -139,7 +139,7 @@ impl Chain for EthereumChain {
                     }
 
                     "Withdrawal" => {
-                        self.handle_withdrawn_event(decoded_event, log, "").await?;
+                        self.handle_withdrawn_event(decoded_event, log).await?;
                     }
 
                     "DstEscrowCreated" => {
@@ -157,7 +157,10 @@ impl Chain for EthereumChain {
     }
 }
 
-fn decode_log_with_abi(abi: &JsonAbi, log: &Log) -> anyhow::Result<Option<(String, DecodedEvent)>> {
+pub fn decode_log_with_abi(
+    abi: &JsonAbi,
+    log: &Log,
+) -> anyhow::Result<Option<(String, DecodedEvent)>> {
     let topics = log.topics();
     if topics.is_empty() {
         return Err(anyhow::anyhow!("Log has no topics"));

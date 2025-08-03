@@ -105,7 +105,7 @@ mod tests {
             "0xAdf0c64ba2A08Bf305474b5bDA7E063428df34aF".to_string(),
             ChainType::Ethereum("base".to_string()),
             db,
-            29195119,
+            29195987,
             &factory_abi,
         )
         .await?;
@@ -131,7 +131,7 @@ mod tests {
             "0x77D877f0f43C283448687b619047F80Eb8600b17".to_string(),
             ChainType::Ethereum("monad".to_string()),
             db,
-            28979120,
+            28982076,
             &factory_abi,
         )
         .await?;

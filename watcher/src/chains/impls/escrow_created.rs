@@ -98,13 +98,14 @@ impl EthereumChain {
                 WatcherEventType::SrcEscrowCreatedEvent,
                 &param_three.escrow_address,
                 &hex::encode(block_hash),
+                log,
             )
             .await
             .expect("Failed to Update the database");
 
         info!(
             "Successfully updated database for order hash: {}",
-            param_one.order_hash
+            event.param_one.order_hash
         );
 
         Ok(())
@@ -138,12 +139,13 @@ impl EthereumChain {
                 WatcherEventType::DstEscrowCreatedEvent,
                 &event.escrow_address,
                 &hex::encode(block_hash),
+                log,
             )
             .await
             .expect("Failed to Update the database");
 
         info!(
-            "Successfully updated database for order hash: {}",
+            "Successfully updated database for order_hash: {}",
             event.order_hash
         );
 

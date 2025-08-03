@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::fs;
 use std::sync::Arc;
 use std::{env, path::Path};
+use watcher::watchers::escrow_monitor::EscrowMonitor;
 use watcher::{
     config::WatcherConfig, orderbook::provider::OrderbookProvider, server::Server,
     types::ChainType, watchers::factory::FactoryWatcher,
@@ -20,6 +21,7 @@ async fn main() -> anyhow::Result<()> {
 
     start_server(config.clone());
     start_factory_watchers(config.clone(), db.clone()).await?;
+    start_escrow_monitor(config.clone(), db.clone()).await?;
 
     tokio::signal::ctrl_c().await?;
     Ok(())
@@ -103,6 +105,24 @@ async fn start_factory_watchers(
     }
 
     tracing::info!("All factory watchers started successfully");
+    Ok(())
+}
+
+async fn start_escrow_monitor(
+    config: WatcherConfig,
+    db: Arc<OrderbookProvider>,
+) -> anyhow::Result<()> {
+    tracing::info!("Starting escrow monitor service");
+    let escrow_abi = load_abi(Path::new("src/abi/escrow_src.json"))?;
+    let mut monitor = EscrowMonitor::new(db.clone(), &config, escrow_abi).await?;
+
+    tokio::spawn(async move {
+        if let Err(e) = monitor.start().await {
+            tracing::error!("Escrow monitor error: {:?}", e);
+        }
+    });
+
+    tracing::info!("Escrow monitor started successfully");
     Ok(())
 }
 

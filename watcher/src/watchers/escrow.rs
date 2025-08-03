@@ -66,14 +66,14 @@ mod tests {
             .connect(db_url)
             .await?;
         let db = Arc::new(OrderbookProvider::new(pool));
-        let json_abi = load_abi(Path::new("src/abi/escrow.json"))?;
+        let json_abi = load_abi(Path::new("src/abi/escrow_src.json"))?;
 
         let mut watcher = EscrowWatcher::new(
             "https://base-sepolia.drpc.org".to_string(),
-            "0xeed749168e49fdf7c1cb60b9d965bc3f7f8d416d".to_string(),
+            "0xe6f15fe59e724643555ba890a79f0437f296d09c".to_string(),
             ChainType::Ethereum("base".to_string()),
             db,
-            29182503,
+            29196316,
             json_abi,
         )
         .await?;

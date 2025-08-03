@@ -11,7 +11,7 @@ pub type EthereumClient = RootProvider<Ethereum>;
 pub struct SecretEntry {
     pub index: u32,
     pub secret: Option<String>,
-    pub secret_hash: String,
+    pub secret_hash: Option<String>,
 }
 
 #[derive(Debug, Clone)]
