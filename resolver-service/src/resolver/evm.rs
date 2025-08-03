@@ -3,11 +3,12 @@ use std::fs;
 
 use anyhow::Result;
 use alloy::{
-    contract::{ContractInstance, Interface}, dyn_abi::{DynSolValue, Word}, hex, json_abi::JsonAbi, network::EthereumWallet, primitives::{Address, U256}, providers::{fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller, WalletFiller}, ProviderBuilder, RootProvider}, signers::local::LocalSigner
+    contract::{ContractInstance, Interface}, dyn_abi::{DynSolValue, Word}, hex, json_abi::JsonAbi, network::{EthereumWallet, TransactionBuilder}, primitives::{Address, U256}, providers::{fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller, WalletFiller}, Provider, ProviderBuilder, RootProvider}, rpc::types::TransactionRequest, signers::local::LocalSigner
 };
 use reqwest::Url;
+use serde::Deserialize;
 use serde_json::Value;
-use crate::{order_mapper::OrderAction, resolver::Resolver, settings::ChainSettings};
+use crate::{order_mapper::OrderAction, resolver::{CustomImmutables, Resolver}, settings::ChainSettings};
 
 pub struct ResolverContract {
     address: String,
@@ -50,20 +51,20 @@ impl ResolverContract {
 
 pub struct EvmResolver {
     contract: ResolverContract,
-    chain_id: u64,
+    chain_id: String,
 }
+
+
 
 #[async_trait::async_trait]
 impl Resolver for EvmResolver {
-    async fn deploy_dest_escrow(&self, order_action: &OrderAction) -> Result<()> {
+    async fn deploy_dest_escrow(&self, order_action: &OrderAction, ) -> Result<()> {
         tracing::info!(
             chain_id=?self.chain_id,
             order_id=?order_action.order_id,
             "Deploying dest escrow"
         );
         
-
-
         let contract = self.contract.get_contract().await?;
         
         // For deployDst function, we need:
@@ -74,17 +75,21 @@ impl Resolver for EvmResolver {
         // Create immutables tuple based on order data
         // IBaseEscrow.Immutables: (bytes32, bytes32, uint256, uint256, uint256, uint256, uint256, uint256)
         let making_amount_str = order_action.order.making_amount.to_plain_string();
+
+        dbg!(&order_action.order.dst_deploy_immutables);
+
+        let dst_deploy_immutables = serde_json::from_value::<CustomImmutables>(order_action.order.dst_deploy_immutables.clone())?;
         
         tracing::info!("order_action.order.order.taker_asset: {:?}", order_action.order.taker_asset);
         let immutables_tuple = DynSolValue::Tuple(vec![
-            DynSolValue::FixedBytes(Word::from_str(&order_action.order.order_hash)?, 32), // orderHash (bytes32)
+            DynSolValue::FixedBytes(Word::from_str(&dst_deploy_immutables.order_hash)?, 32), // orderHash (bytes32)
             DynSolValue::FixedBytes(Word::from_str(&secret_hash)?, 32), // hashlock (bytes32)
-            DynSolValue::Uint(U256::from_str(&order_action.order.maker)?, 256), // maker (uint256)
-            DynSolValue::Uint(U256::from_str(&order_action.order.receiver)?, 256), // taker (uint256)
-            DynSolValue::Uint(U256::from_str(&order_action.order.taker_asset)?, 256), // token (uint256)
-            DynSolValue::Uint(U256::from_str(&making_amount_str)?, 256), // amount (uint256)
+            DynSolValue::Uint(U256::from_str(&dst_deploy_immutables.maker)?, 256), // maker (uint256)
+            DynSolValue::Uint(U256::from_str(&dst_deploy_immutables.taker)?, 256), // taker (uint256)
+            DynSolValue::Uint(U256::from_str(&dst_deploy_immutables.token)?, 256), // token (uint256)
+            DynSolValue::Uint(U256::from_str(&dst_deploy_immutables.amount)?, 256), // amount (uint256)
             DynSolValue::Uint(safety_deposit, 256), // safetyDeposit (uint256)
-            DynSolValue::Uint(U256::from_str(&order_action.order.deadline.to_string())?, 256), // timelocks (uint256)
+            DynSolValue::Uint(U256::from_str(&dst_deploy_immutables.timelocks)?, 256), // timelocks (uint256)
         ]);
         
         // Use current timestamp as srcCancellationTimestamp
@@ -221,22 +226,70 @@ impl Resolver for EvmResolver {
         let safety_deposit = U256::from(0u64);
         let making_amount_str = order_action.order.making_amount.to_plain_string();
         
+        tracing::info!(
+            order_hash = ?order_action.order.order_hash,
+            secret_hash = ?secret_hash,
+            maker = ?order_action.order.maker,
+            taker = ?order_action.order.taker,
+            maker_asset = ?order_action.order.maker_asset,
+            making_amount = ?making_amount_str,
+            safety_deposit = ?safety_deposit,
+            timelock = ?order_action.order.timelock,
+            "Passing to DynSolValue for withdraw_src_escrow"
+        );
+
+        
+
+        
+        
+        // let src_immutables = serde_json::from_value::<SrcImmutables>(order_action.order.src_immutables.clone())?;
+
+        // dbg!(&order_action.order.src_immutables);
+        // tracing::info!("src_immutables: {:?}", src_immutables);
+        // let hardcoded_timelock = U256::from_str("688e7ec20000006500000064000000020000007a000000790000007800000002").unwrap();
+        // let hardcoded_timelock = U256::from_str("688e7ec20000006500000064000000020000007a000000790000007800000002").unwrap();
+
+        // let immutables_tuple = DynSolValue::Tuple(vec![
+        //     DynSolValue::FixedBytes(Word::from_str(&src_immutables.order_hash)?, 32), // orderHash (bytes32)
+        //     DynSolValue::FixedBytes(Word::from_str(&src_immutables.hashlock)?, 32), // hashlock (bytes32)
+        //     DynSolValue::Uint(U256::from_str(&src_immutables.maker_address)?, 256), // maker (uint256)
+        //     DynSolValue::Uint(U256::from_str(&src_immutables.taker_address)?, 256), // taker (uint256)
+        //     DynSolValue::Uint(U256::from_str(&src_immutables.token_address)?, 256), // token (uint256)
+        //     DynSolValue::Uint(U256::from_str(&src_immutables.src_amount)?, 256), // amount (uint256)
+        //     DynSolValue::Uint(U256::from_str(&src_immutables.safety_deposit)?, 256), // safetyDeposit (uint256)
+        //     DynSolValue::Uint(U256::from_str(&src_immutables.timelock)?, 256), // timelocks (uint256)
+        // ]);
+
+        let src_withdraw_immutables = serde_json::from_value::<CustomImmutables>(order_action.order.src_withdraw_immutables.clone())?;
         let immutables_tuple = DynSolValue::Tuple(vec![
-            DynSolValue::FixedBytes(Word::from_str(&order_action.order.order_hash)?, 32), // orderHash (bytes32)
+            DynSolValue::FixedBytes(Word::from_str(&src_withdraw_immutables.order_hash)?, 32), // orderHash (bytes32)
             DynSolValue::FixedBytes(Word::from_str(&secret_hash)?, 32), // hashlock (bytes32)
-            DynSolValue::Uint(U256::from_str(&order_action.order.maker)?, 256), // maker (uint256)
-            DynSolValue::Uint(U256::from_str(&order_action.order.taker)?, 256), // taker (uint256)
-            DynSolValue::Uint(U256::from_str(&order_action.order.maker_asset)?, 256), // token (uint256)
-            DynSolValue::Uint(U256::from_str(&making_amount_str)?, 256), // amount (uint256)
+            DynSolValue::Uint(U256::from_str(&src_withdraw_immutables.maker)?, 256), // maker (uint256)
+            DynSolValue::Uint(U256::from_str(&src_withdraw_immutables.taker)?, 256), // taker (uint256)
+            DynSolValue::Uint(U256::from_str(&src_withdraw_immutables.token)?, 256), // token (uint256)
+            DynSolValue::Uint(U256::from_str(&src_withdraw_immutables.amount)?, 256), // amount (uint256)
             DynSolValue::Uint(safety_deposit, 256), // safetyDeposit (uint256)
-            DynSolValue::Uint(U256::from_str(&order_action.order.timelock)?, 256), // timelocks (uint256)
+            DynSolValue::Uint(U256::from_str(&src_withdraw_immutables.timelocks)?, 256), // timelocks (uint256)
         ]);
         
-            
+        
+        tracing::info!("secret: {:?}", secret);
+        tracing::info!("secret_hash: {:?}", secret_hash);
+        
 
         let source_escrow_address = order_action.order.src_escrow_address.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Source escrow address not found"))?;
-        
+        tracing::warn!("chain id: {:?}", self.chain_id);
+        tracing::info!("source_escrow_address: {:?}", source_escrow_address);
+        // let calldata = contract
+        //     .function("withdraw", &[
+        //         DynSolValue::Address(Address::from_str(source_escrow_address)?), 
+        //         DynSolValue::FixedBytes(Word::from_str(secret)?, 32), // secret (bytes32)
+        //         immutables_tuple.clone() // immutables (tuple)
+        //     ])?
+        //     .calldata().clone();
+        // tracing::error!("calldata: {:?}", calldata);
+
         let result = contract
             .function("withdraw", &[
                 DynSolValue::Address(Address::from_str(source_escrow_address)?), 
@@ -259,43 +312,58 @@ impl Resolver for EvmResolver {
         
         let contract = self.contract.get_contract().await?;
         
-        // Get the secret from the order
-        let secret = order_action.order.secrets.first()
-            .and_then(|s| s.secret.as_ref())
-            .ok_or_else(|| anyhow::anyhow!("No secret found for withdrawal"))?;
+        // // Get the secret from the order
+        // let secret = order_action.order.secrets.first()
+        //     .and_then(|s| s.secret.as_ref())
+        //     .ok_or_else(|| anyhow::anyhow!("No secret found for withdrawal"))?;
+
+        let call_data = serde_json::from_value::<String>(order_action.order.dst_withdraw_immutables.clone())?;
+        tracing::error!("call_data: {:?}", call_data);
+        // let call_data = "2c3c9a37000000000000000000000000b80cd6924333ea5718c4dcf4e3f0a49369d7bb5fdaf5940210e35d4bd1792d84c75c2ac84c5800a2f45eebcef84530e224a5f1e1ba7a5c5fcdabac51123d738aa7c25ad5d977ad7860b97fe9aa055f538791f657b3b4b265f6f5c36287d67d3080b36d15f448119a20c9d935df4c5fc0b60a95780000000000000000000000001b150538e943f00127929f7eeb65754f7beb0b6d000000000000000000000000d7c1f4947a4ce0a79b146918233e306114e1a78a0000000000000000000000006756682b6144018dea5416640a0d0e8783e33f600000000000000000000000000000000000000000000000007ce66c50e28400000000000000000000000000000000000000000000000000000000000000000000688ea48c000003f2000003e800000002000004c4000004ba000004b000000002".to_string();
         
-        // Create immutables tuple for the withdraw call
-        // IBaseEscrow.Immutables: (bytes32, bytes32, uint256, uint256, uint256, uint256, uint256, uint256)
-        let secret_hash = order_action.order.secrets.first().map(|s| s.secret_hash.clone()).ok_or(anyhow::anyhow!("No secret hash found"))?;
-        let safety_deposit = U256::from(0u64);
-        let making_amount_str = order_action.order.making_amount.to_plain_string();
+        // // Create immutables tuple for the withdraw call
+        // // IBaseEscrow.Immutables: (bytes32, bytes32, uint256, uint256, uint256, uint256, uint256, uint256)
+        // let secret_hash = order_action.order.secrets.first().map(|s| s.secret_hash.clone()).ok_or(anyhow::anyhow!("No secret hash found"))?;
+        // let safety_deposit = U256::from(0u64);
+        // let making_amount_str = order_action.order.making_amount.to_plain_string();
         
-        let immutables_tuple = DynSolValue::Tuple(vec![
-            DynSolValue::FixedBytes(Word::from_str(&order_action.order.order_hash)?, 32), // orderHash (bytes32)
-            DynSolValue::FixedBytes(Word::from_str(&secret_hash)?, 32), // hashlock (bytes32)
-            DynSolValue::Uint(U256::from_str(&order_action.order.maker)?, 256), // maker (uint256)
-            DynSolValue::Uint(U256::from_str(&order_action.order.taker)?, 256), // taker (uint256)
-            DynSolValue::Uint(U256::from_str(&order_action.order.taker_asset)?, 256), // token (uint256)
-            DynSolValue::Uint(U256::from_str(&making_amount_str)?, 256), // amount (uint256)
-            DynSolValue::Uint(safety_deposit, 256), // safetyDeposit (uint256)
-            DynSolValue::Uint(U256::from_str(&order_action.order.timelock)?, 256), // timelocks (uint256)
-        ]);
+        // let immutables_tuple = DynSolValue::Tuple(vec![
+        //     DynSolValue::FixedBytes(Word::from_str(&order_action.order.order_hash)?, 32), // orderHash (bytes32)
+        //     DynSolValue::FixedBytes(Word::from_str(&secret_hash)?, 32), // hashlock (bytes32)
+        //     DynSolValue::Uint(U256::from_str(&order_action.order.maker)?, 256), // maker (uint256)
+        //     DynSolValue::Uint(U256::from_str(&order_action.order.taker)?, 256), // taker (uint256)
+        //     DynSolValue::Uint(U256::from_str(&order_action.order.taker_asset)?, 256), // token (uint256)
+        //     DynSolValue::Uint(U256::from_str(&making_amount_str)?, 256), // amount (uint256)
+        //     DynSolValue::Uint(safety_deposit, 256), // safetyDeposit (uint256)
+        //     DynSolValue::Uint(U256::from_str(&order_action.order.timelock)?, 256), // timelocks (uint256)
+        // ]);
         
             
+        tracing::error!("call_data: {:?}", call_data);
+        // let dst_escrow_address = order_action.order.dst_escrow_address.as_ref()
+        //     .ok_or_else(|| anyhow::anyhow!("Destination escrow address not found"))?;
 
-        let dst_escrow_address = order_action.order.dst_escrow_address.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Destination escrow address not found"))?;
+
+        let provider = contract.provider();
         
-        let result = contract
-            .function("withdraw", &[
-                DynSolValue::Address(Address::from_str(dst_escrow_address)?), 
-                DynSolValue::FixedBytes(Word::from_str(secret)?, 32), // secret (bytes32)
-                immutables_tuple // immutables (tuple)
-            ])?
-            .send()
-            .await?;
+        // Build the transaction.
+        let tx = TransactionRequest::default()
+                .with_to(*contract.address())
+                .with_input(hex::decode(call_data)?);
         
-        tracing::info!("Withdraw transaction result: {:?}", result);
+        let pending_tx = provider.send_transaction(tx).await?;
+        
+        tracing::error!("tx_hash: {:?}", pending_tx);
+        tracing::info!("Call data submitted: {:?}", pending_tx);
+        
+        // let result = contract
+        //     .function("withdraw", &[
+        //         DynSolValue::Address(Address::from_str(dst_escrow_address)?), 
+        //         DynSolValue::FixedBytes(Word::from_str(secret)?, 32), // secret (bytes32)
+        //         immutables_tuple // immutables (tuple)
+        //     ])?
+        //     .send()
+        //     .await?;
 
         Ok(())
     }
@@ -345,7 +413,7 @@ impl EvmResolver {
         );
         Self {
             contract,
-            chain_id: chain_settings.chain_id,
+            chain_id: chain_settings.chain_id.clone(),
         }
     }
 }

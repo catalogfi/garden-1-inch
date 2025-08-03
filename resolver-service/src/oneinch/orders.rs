@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use reqwest::Client;
+use tracing;
 
 /// Orders API client for Garden 1-Inch Relayer
 pub struct OrdersClient {
@@ -29,9 +30,12 @@ impl OrdersClient {
             .query(&params)
             .send()
             .await?;
-        
+
         if response.status().is_success() {
-            let result: ApiResponse<GetActiveOrdersOutput> = response.json().await?;
+            let response_text = response.text().await?;
+            tracing::debug!("Raw response: {}", response_text);
+            
+            let result: ApiResponse<GetActiveOrdersOutput> = serde_json::from_str(&response_text)?;
             match result.status.as_str() {
                 "Ok" => Ok(result.result.unwrap()),
                 "Error" => Err(anyhow::anyhow!("API Error: {}", result.error.unwrap_or_default())),
@@ -160,9 +164,15 @@ pub enum OrderType {
     MultipleFills,
 }
 
+/// Signature structure for order signatures
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Signature {
+    pub r: String,
+    pub vs: String,
+}
+
 /// Secret entry structure for storing secrets and their hashes
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SecretEntry {
     pub index: u32,
     pub secret: Option<String>,
@@ -199,21 +209,21 @@ fn default_maker_traits() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActiveOrderOutput {
     pub order_hash: String,
-    pub signature: serde_json::Value,
+    pub signature: Signature,
     pub deadline: u64,
     pub auction_start_date: Option<String>,
     pub auction_end_date: Option<String>,
     pub remaining_maker_amount: String,
     pub extension: serde_json::Value,
-    pub src_chain_id: u64,
-    pub dst_chain_id: u64,
+    pub src_chain_id: String,
+    pub dst_chain_id: String,
     pub order: OrderInput,
-    pub order_type: OrderType,
-    pub secrets: Vec<SecretEntry>,
     pub taker: String,
     pub timelock: String,
     pub taker_traits: String,
-    pub args: serde_json::Value,
+    pub args: String,
+    pub order_type: OrderType,
+    pub secrets: Vec<SecretEntry>
 }
 
 /// Meta information for paginated responses
@@ -238,8 +248,8 @@ pub struct CrossChainOrder {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub order_hash: String,
-    pub src_chain_id: i64,
-    pub dst_chain_id: i64,
+    pub src_chain_id: String,
+    pub dst_chain_id: String,
     pub maker: String,
     pub receiver: String,
     pub taker: String,
@@ -266,6 +276,10 @@ pub struct CrossChainOrder {
     pub dst_tx_hash: Option<String>,
     pub filled_maker_amount: BigDecimal,
     pub filled_taker_amount: BigDecimal,
+    pub src_deploy_immutables: serde_json::Value,
+    pub dst_deploy_immutables: serde_json::Value,
+    pub src_withdraw_immutables: serde_json::Value,
+    pub dst_withdraw_immutables: serde_json::Value,
 }
 
 /// Detailed order information
@@ -274,8 +288,8 @@ pub struct OrderDetail {
     pub created_at: String,
     pub updated_at: String,
     pub order_hash: String,
-    pub src_chain_id: u64,
-    pub dst_chain_id: u64,
+    pub src_chain_id: String,
+    pub dst_chain_id: String,
     pub maker: String,
     pub receiver: String,
     pub taker: String,
@@ -302,6 +316,10 @@ pub struct OrderDetail {
     pub dst_tx_hash: Option<String>,
     pub filled_maker_amount: BigDecimal,
     pub filled_taker_amount: BigDecimal,
+    pub src_deploy_immutables: serde_json::Value,
+    pub dst_deploy_immutables: serde_json::Value,
+    pub src_withdraw_immutables: serde_json::Value,
+    pub dst_withdraw_immutables: serde_json::Value,
 }
 
 /// Secret response for getting order secret

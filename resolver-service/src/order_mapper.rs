@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, HashSet}, time::{Duration, SystemTime}};
 use anyhow::Result;
 use moka::future::Cache;
-use tokio::time::sleep;
+use tokio::{time::sleep, fs};
 
 use crate::{oneinch::orders::{ActiveOrderOutput, ActiveOrdersParams, OrderDetail, OrderStatus, OrdersClient}, resolver::Resolver};
 
@@ -24,9 +24,9 @@ pub enum ActionType {
 
 pub struct OrderMapperBuilder {
     order_client: Option<OrdersClient>,
-    chain_resolvers: HashMap<u64, Box<dyn Resolver + Send + Sync>>,
-    supported_chains: HashSet<u64>,
-    supported_assets: HashMap<u64, HashSet<String>>,
+    chain_resolvers: HashMap<String, Box<dyn Resolver + Send + Sync>>,
+    supported_chains: HashSet<String>,
+    supported_assets: HashMap<String, HashSet<String>>,
     poll_interval: Duration,
     action_ttl: Duration,
 }
@@ -50,16 +50,16 @@ impl OrderMapperBuilder {
     }
 
     /// Add a chain resolver
-    pub fn add_chain_resolver(mut self, chain_id: u64, resolver: Box<dyn Resolver + Send + Sync>) -> Self {
+    pub fn add_chain_resolver(mut self, chain_id: String, resolver: Box<dyn Resolver + Send + Sync>) -> Self {
         self.chain_resolvers.insert(chain_id.clone(), resolver);
         self.supported_chains.insert(chain_id);
         self
     }
 
     /// Add multiple supported assets for a specific chain
-    pub fn add_supported_assets(mut self, chain_id: u64, assets: Vec<String>) -> Self {
+    pub fn add_supported_assets(mut self, chain_id: String, assets: Vec<String>) -> Self {
         for asset in assets {
-            self.supported_assets.entry(chain_id).or_insert_with(HashSet::new).insert(asset);
+            self.supported_assets.entry(chain_id.clone()).or_insert_with(HashSet::new).insert(asset.to_lowercase());
         }
         self
     }
@@ -97,9 +97,9 @@ impl OrderMapperBuilder {
 }
 
 pub struct OrderMapper {
-    pub chain_resolvers: HashMap<u64, Box<dyn Resolver + Send + Sync>>, // Key by chain_id
-    pub supported_chains: HashSet<u64>, // Key by chain_id
-    pub supported_assets: HashMap<u64, HashSet<String>>, // chain_id -> supported assets
+    pub chain_resolvers: HashMap<String, Box<dyn Resolver + Send + Sync>>, // Key by chain_id
+    pub supported_chains: HashSet<String>, // Key by chain_id
+    pub supported_assets: HashMap<String, HashSet<String>>, // chain_id -> supported assets
     pub processing_orders: Cache<String, (ActionType, SystemTime)>, // Track last processed action and timestamp
     pub order_client: OrdersClient,
     pub poll_interval: Duration,
@@ -113,7 +113,12 @@ impl OrderMapper {
     
     pub async fn run(&mut self) {
         tracing::info!("OrderMapper started with {} supported chains", self.supported_chains.len());
-        // self.processing_orders.insert("0xcfdc00bcf11a90fe1041b982ccdca4f63ff79d6f071afb74c90aa0554cb3eb58".to_string(), (ActionType::WidthdrawSrcEscrow, SystemTime::now())).await;
+        
+        // Load order hashes from file
+        if let Err(e) = self.load_order_hashes_from_file().await {
+            tracing::warn!("Failed to load order hashes from file: {}", e);
+        }
+        
         for (chain_id, assets) in &self.supported_assets {
             tracing::info!(chain_id=?chain_id, assets_count=assets.len(), "Chain supports assets");
         }
@@ -198,6 +203,7 @@ impl OrderMapper {
 
     async fn discover_and_track_orders(&mut self) -> Result<()> {
         let orders = self.order_client.get_active_orders(ActiveOrdersParams::new()).await?;
+        // self.processing_orders.insert("0x1d4e77a02a589a6f7d305a47003f96fce74dcaeeacc55e91427c247c6c2277bc".to_string(), (ActionType::DeployDestEscrow, SystemTime::now())).await;
         tracing::info!("Discovering {} active orders", orders.items.len());
         
         for order in orders.items {
@@ -215,6 +221,7 @@ impl OrderMapper {
             if self.is_supported_order(&order_detail) {
                 tracing::info!(order_id=?order_id, "Adding supported order to tracking");
                 self.processing_orders.insert(order_id, (ActionType::NoOp, SystemTime::now())).await;
+                // self.processing_orders.insert("0x1d4e77a02a589a6f7d305a47003f96fce74dcaeeacc55e91427c247c6c2277bc".to_string(), (ActionType::DeployDestEscrow, SystemTime::now())).await;
             } else {
                 tracing::debug!(order_id=?order_id, "Order not supported, skipping");
             }
@@ -300,23 +307,44 @@ impl OrderMapper {
 
 
     fn is_supported_order(&self, order: &OrderDetail) -> bool {
-        tracing::info!("supported_chains: {:?}", self.supported_chains);
-        tracing::info!("supported_assets: {:?}", self.supported_assets);
         self.supported_chains.contains(&order.src_chain_id) &&
         self.supported_chains.contains(&order.dst_chain_id) &&
-        self.supported_assets.get(&order.src_chain_id).map_or(false, |assets| assets.contains(&order.maker_asset)) &&
-        self.supported_assets.get(&order.dst_chain_id).map_or(false, |assets| assets.contains(&order.taker_asset))
+        self.supported_assets.get(&order.src_chain_id).map_or(false, |assets| assets.contains(&order.maker_asset.to_lowercase())) &&
+        self.supported_assets.get(&order.dst_chain_id).map_or(false, |assets| assets.contains(&order.taker_asset.to_lowercase()))
+    }
+
+    async fn load_order_hashes_from_file(&mut self) -> Result<()> {
+        let file_path = "order_hashes.txt";
+        
+        match tokio::fs::read_to_string(file_path).await {
+            Ok(contents) => {
+                let mut loaded_count = 0;
+                for line in contents.lines() {
+                    let order_hash = line.trim();
+                    if !order_hash.is_empty() && order_hash.starts_with("0x") {
+                        tracing::info!("Loading order hash from file: {}", order_hash);
+                        self.processing_orders.insert(order_hash.to_string(), (ActionType::NoOp, SystemTime::now())).await;
+                        loaded_count += 1;
+                    } else if !order_hash.is_empty() {
+                        tracing::warn!("Skipping invalid order hash format: {}", order_hash);
+                    }
+                }
+                tracing::info!("Loaded {} order hashes from file: {}", loaded_count, file_path);
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!("Could not read order hashes file {}: {}", file_path, e);
+                Err(anyhow::anyhow!("Failed to read order hashes file: {}", e))
+            }
+        }
     }
 
     fn determine_action(&self, order: &OrderDetail) -> (ActionType, ActionType) {
-        if order.order_hash == "0xcf785dc757bd947b8f379522bcc832d2c87def47fb1813f3a15aaf2c06266915" {
-            return (ActionType::WidthdrawSrcEscrow, ActionType::NoOp);
-        }
         tracing::info!("Determining action for order: {:?}", order.order_hash);
         match order.status {
             OrderStatus::Unmatched => (ActionType::DeploySrcEscrow, ActionType::NoOp),
             OrderStatus::SourceFilled => (ActionType::NoOp, ActionType::DeployDestEscrow),
-            OrderStatus::DestinationFilled => (ActionType::WidthdrawSrcEscrow, ActionType::NoOp),
+            OrderStatus::DestinationFilled => (ActionType::WidthdrawSrcEscrow, ActionType::WidthdrawDestEscrow),
             OrderStatus::SourceWithdrawPending => (ActionType::WidthdrawSrcEscrow, ActionType::NoOp),
             OrderStatus::DestinationWithdrawPending => (ActionType::NoOp, ActionType::WidthdrawDestEscrow),
             OrderStatus::SourceSettled => (ActionType::NoOp, ActionType::WidthdrawDestEscrow),
