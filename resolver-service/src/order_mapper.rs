@@ -59,7 +59,7 @@ impl OrderMapperBuilder {
     /// Add multiple supported assets for a specific chain
     pub fn add_supported_assets(mut self, chain_id: u64, assets: Vec<String>) -> Self {
         for asset in assets {
-            self.supported_assets.entry(chain_id).or_insert_with(HashSet::new).insert(asset);
+            self.supported_assets.entry(chain_id).or_insert_with(HashSet::new).insert(asset.to_lowercase());
         }
         self
     }
@@ -311,8 +311,8 @@ impl OrderMapper {
         tracing::info!("supported_assets: {:?}", self.supported_assets);
         self.supported_chains.contains(&order.src_chain_id) &&
         self.supported_chains.contains(&order.dst_chain_id) &&
-        self.supported_assets.get(&order.src_chain_id).map_or(false, |assets| assets.contains(&order.maker_asset)) &&
-        self.supported_assets.get(&order.dst_chain_id).map_or(false, |assets| assets.contains(&order.taker_asset))
+        self.supported_assets.get(&order.src_chain_id).map_or(false, |assets| assets.contains(&order.maker_asset.to_lowercase())) &&
+        self.supported_assets.get(&order.dst_chain_id).map_or(false, |assets| assets.contains(&order.taker_asset.to_lowercase()))
     }
 
     async fn load_order_hashes_from_file(&mut self) -> Result<()> {
