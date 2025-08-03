@@ -1,0 +1,54 @@
+import { keccak256, solidityPackedKeccak256 } from 'ethers';
+import { SimpleMerkleTree } from '@openzeppelin/merkle-tree';
+import { BitMask, BN, getBytesCount, isHexBytes } from '@1inch/byte-utils';
+import assert from 'assert';
+export class HashLock {
+    constructor(val) {
+        this.value = val;
+    }
+    static hashSecret(secret) {
+        assert(isHexBytes(secret) && getBytesCount(secret) === 32n, 'secret length must be 32 bytes hex encoded');
+        return keccak256(secret);
+    }
+    static getMerkleLeaves(secrets) {
+        return HashLock.getMerkleLeavesFromSecretHashes(secrets.map(HashLock.hashSecret));
+    }
+    static getMerkleLeavesFromSecretHashes(secretHashes) {
+        return secretHashes.map((s, idx) => solidityPackedKeccak256(['uint64', 'bytes32'], [idx, s]));
+    }
+    static getProof(leaves, idx) {
+        return SimpleMerkleTree.of(leaves).getProof(idx);
+    }
+    static fromString(value) {
+        assert(isHexBytes(value) && getBytesCount(value) === 32n, 'HashLock value must be bytes32 hex encoded');
+        return new HashLock(value);
+    }
+    /**
+     * Create HashLock from keccak256 hash of secret
+     */
+    static forSingleFill(secret) {
+        return new HashLock(HashLock.hashSecret(secret));
+    }
+    static forMultipleFills(leaves) {
+        assert(leaves.length > 2, 'leaves array must be greater than 2. Or use HashLock.forSingleFill');
+        const root = SimpleMerkleTree.of(leaves).root;
+        const rootWithCount = BN.fromHex(root).setMask(new BitMask(240n, 256n), BigInt(leaves.length - 1));
+        return new HashLock(rootWithCount.toHex(64));
+    }
+    /**
+     * Only use if HashLockInfo is for multiple fill order
+     * Otherwise garbage will be returned
+     *
+     */
+    getPartsCount() {
+        return new BN(BigInt(this.value)).getMask(new BitMask(240n, 256n)).value;
+    }
+    toString() {
+        return this.value;
+    }
+    eq(other) {
+        return this.value === other.value;
+    }
+}
+HashLock.Web3Type = 'bytes32';
+//# sourceMappingURL=hash-lock.js.map
