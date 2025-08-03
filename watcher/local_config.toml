@@ -5,17 +5,17 @@ polling_interval = 5000
 [[chains.evm]]
 name = "base"
 chain_id = 84532
-rpc_url = "https://base-sepolia.drpc.org"
-contract_address = "0xc33241e826d51D75966526DA0C0a4115241e4eBd"
-start_block = 29201102
+rpc_url = "https://base-sepolia-rpc.publicnode.com"
+contract_address = "0x048975f98b998796d1cF54DE3A3Fc2bE01d891Fd"
+start_block = 29219473
 
 
 [[chains.evm]]
 name = "monad"
 chain_id = 10143
-rpc_url = "https://testnet-rpc.monad.xyz"
-contract_address = "0x1883eFAb5D34467011b8cDa636F7eda966461137"
-start_block = 28998882
+rpc_url = "https://rpc.ankr.com/monad_testnet"
+contract_address = "0xa62dF4c42fFd8a352436461f3A3542bF2EFb06bF"
+start_block = 29060696
 
 
 [[chains.starknet]]

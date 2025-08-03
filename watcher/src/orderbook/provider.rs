@@ -21,11 +21,68 @@ pub struct PendingOrder {
     pub status: String,
 }
 
+pub struct OrderEscrowInfo {
+    pub status: String,
+    pub src_escrow: Option<String>,
+    pub dst_escrow: Option<String>,
+}
+
 impl OrderbookProvider {
     pub fn new(pool: Pool<Postgres>) -> Self {
         OrderbookProvider { pool }
     }
 
+    pub fn normalize_order_hash(&self, order_hash: &str) -> String {
+        if order_hash.starts_with("0x") {
+            order_hash.to_lowercase()
+        } else {
+            format!("0x{}", order_hash.to_lowercase())
+        }
+    }
+
+    pub fn normalize_address(&self, address: &str) -> String {
+        if address.starts_with("0x") {
+            address.to_lowercase()
+        } else {
+            format!("0x{}", address.to_lowercase())
+        }
+    }
+    pub async fn get_order_status(&self, order_hash: &str) -> Result<String, OrderbookError> {
+        let query = "SELECT status FROM orders WHERE order_hash = $1";
+        sqlx::query_scalar(query)
+            .bind(self.normalize_order_hash(order_hash))
+            .fetch_one(&self.pool)
+            .await
+            .map_err(OrderbookError::from)
+    }
+
+    pub async fn is_escrow_source(
+        &self,
+        order_hash: &str,
+        escrow_addr: &str,
+    ) -> Result<bool, OrderbookError> {
+        let query = "SELECT src_escrow_address = $1 FROM orders WHERE order_hash = $2";
+        sqlx::query_scalar(query)
+            .bind(self.normalize_address(escrow_addr))
+            .bind(self.normalize_order_hash(order_hash))
+            .fetch_one(&self.pool)
+            .await
+            .map_err(OrderbookError::from)
+    }
+
+    pub async fn is_escrow_destination(
+        &self,
+        order_hash: &str,
+        escrow_addr: &str,
+    ) -> Result<bool, OrderbookError> {
+        let query = "SELECT dst_escrow_address = $1 FROM orders WHERE order_hash = $2";
+        sqlx::query_scalar(query)
+            .bind(self.normalize_address(escrow_addr))
+            .bind(self.normalize_order_hash(order_hash))
+            .fetch_one(&self.pool)
+            .await
+            .map_err(OrderbookError::from)
+    }
     pub async fn from_db_url(db_url: &str) -> Result<Self, OrderbookError> {
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(2000)
@@ -93,6 +150,9 @@ impl OrderbookProvider {
         block_hash: &str,
         log: Log,
     ) -> Result<(), OrderbookError> {
+        let normalized_order_hash = self.normalize_order_hash(order_hash);
+        let normalized_escrow = self.normalize_address(escrow_address);
+
         let (status, address_field, tx_hash_field, log_field, should_update_log) = match event_type
         {
             WatcherEventType::SrcEscrowCreatedEvent => (
@@ -162,8 +222,8 @@ impl OrderbookProvider {
 
             sqlx::query(&query)
                 .bind(status.to_string())
-                .bind(escrow_address)
-                .bind(format!("0x{order_hash}"))
+                .bind(normalized_escrow)
+                .bind(normalized_order_hash)
                 .bind(block_hash)
                 .bind(log_json)
                 .execute(&self.pool)
@@ -171,8 +231,8 @@ impl OrderbookProvider {
         } else {
             sqlx::query(&query)
                 .bind(status.to_string())
-                .bind(escrow_address)
-                .bind(format!("0x{order_hash}"))
+                .bind(normalized_escrow)
+                .bind(normalized_order_hash)
                 .bind(block_hash)
                 .execute(&self.pool)
                 .await?
@@ -200,6 +260,7 @@ impl OrderbookProvider {
         order_hash: &str,
         status: OrderStatus,
     ) -> Result<(), OrderbookError> {
+        let normalized_order_hash = self.normalize_order_hash(order_hash);
         let query = r#"
             UPDATE orders 
             SET status = $1, updated_at = NOW()
@@ -208,7 +269,7 @@ impl OrderbookProvider {
 
         let result = sqlx::query(query)
             .bind(status.to_string())
-            .bind(format!("0x{order_hash}"))
+            .bind(normalized_order_hash)
             .execute(&self.pool)
             .await?;
 
@@ -233,6 +294,9 @@ impl OrderbookProvider {
         order_hash: &str,
         escrow_address: &str,
     ) -> anyhow::Result<OrderStatus> {
+        let normalized_order_hash = self.normalize_order_hash(order_hash);
+        let normalized_escrow = self.normalize_address(escrow_address);
+
         let query = r#"
             SELECT src_escrow_address, dst_escrow_address
             FROM orders 
@@ -240,7 +304,7 @@ impl OrderbookProvider {
         "#;
 
         let row = sqlx::query(query)
-            .bind(format!("0x{order_hash}"))
+            .bind(normalized_order_hash)
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| anyhow::anyhow!("Database query failed: {}", e))?;
@@ -251,7 +315,7 @@ impl OrderbookProvider {
         let dst_escrow: Option<String> = row.try_get("dst_escrow_address").ok();
 
         if let Some(src_addr) = src_escrow {
-            if src_addr.to_lowercase() == escrow_address.to_lowercase() {
+            if self.normalize_address(&src_addr) == normalized_escrow {
                 return Ok(OrderStatus::SourceSettled);
             }
         }
@@ -337,5 +401,139 @@ impl OrderbookProvider {
         }
 
         Ok(chain_escrows)
+    }
+
+    pub async fn get_escrow_addresses_with_order_hashes_by_chain(
+        &self,
+    ) -> Result<std::collections::HashMap<i64, Vec<(String, String)>>, OrderbookError> {
+        // let query = r#"
+        //     SELECT src_chain_id as chain_id, src_escrow_address as escrow_address, order_hash
+        //     FROM orders
+        //     WHERE src_escrow_address IS NOT NULL
+        //     AND status IN ('source_filled', 'destination_filled')
+        //     AND deadline > EXTRACT(EPOCH FROM NOW())
+
+        //     UNION
+
+        //     SELECT dst_chain_id as chain_id, dst_escrow_address as escrow_address, order_hash
+        //     FROM orders
+        //     WHERE dst_escrow_address IS NOT NULL
+        //     AND status IN ('source_filled', 'destination_filled')
+        //     AND deadline > EXTRACT(EPOCH FROM NOW())
+        // "#;
+
+        let query = r#"
+    SELECT src_chain_id as chain_id, 
+           LOWER(src_escrow_address) as escrow_address, 
+           LOWER(order_hash) as order_hash
+    FROM orders 
+    WHERE src_escrow_address IS NOT NULL 
+    AND (
+        (status IN ('source_filled', 'destination_filled')) OR
+        (status = 'source_settled' AND dst_escrow_address IS NOT NULL) OR
+        (status = 'destination_settled' AND src_escrow_address IS NOT NULL)
+    )
+    AND deadline > EXTRACT(EPOCH FROM NOW())
+
+    UNION
+
+    SELECT dst_chain_id as chain_id, 
+           LOWER(dst_escrow_address) as escrow_address, 
+           LOWER(order_hash) as order_hash
+    FROM orders 
+    WHERE dst_escrow_address IS NOT NULL 
+    AND (
+        (status IN ('source_filled', 'destination_filled')) OR
+        (status = 'destination_settled' AND src_escrow_address IS NOT NULL) OR
+        (status = 'source_settled' AND dst_escrow_address IS NOT NULL)
+    )
+    AND deadline > EXTRACT(EPOCH FROM NOW())
+"#;
+
+        let rows = sqlx::query(query).fetch_all(&self.pool).await?;
+
+        let mut chain_escrows = std::collections::HashMap::new();
+
+        for row in rows {
+            let chain_id: i64 = row.get("chain_id");
+            let escrow_address: String = row.get("escrow_address");
+            let order_hash: String = row.get("order_hash");
+
+            chain_escrows
+                .entry(chain_id)
+                .or_insert_with(Vec::new)
+                .push((escrow_address, order_hash));
+        }
+
+        Ok(chain_escrows)
+    }
+
+    pub async fn get_order_status_and_escrows(
+        &self,
+        order_hash: &str,
+    ) -> Result<OrderEscrowInfo, OrderbookError> {
+        let query = r#"
+        SELECT status, src_escrow_address, dst_escrow_address
+        FROM orders 
+        WHERE order_hash = $1
+    "#;
+
+        let row = sqlx::query(query)
+            .bind(self.normalize_order_hash(order_hash))
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(OrderEscrowInfo {
+            status: row.get("status"),
+            src_escrow: row.get("src_escrow_address"),
+            dst_escrow: row.get("dst_escrow_address"),
+        })
+    }
+
+    /// Check if an order is completely settled (both source and destination withdrawn)
+    pub async fn is_order_complete(&self, order_hash: &str) -> Result<bool, OrderbookError> {
+        let query = r#"
+            SELECT status
+            FROM orders 
+            WHERE order_hash = $1
+        "#;
+
+        let row = sqlx::query(query)
+            .bind(format!("0x{}", order_hash.trim_start_matches("0x")))
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if let Some(row) = row {
+            let status: String = row.get("status");
+            // Order is complete if both source and destination are settled
+            Ok(status == "source_settled" || status == "destination_settled")
+        } else {
+            Ok(false) // Order not found, consider it not complete
+        }
+    }
+
+    /// Alternative method to check if order is complete by checking both escrow statuses
+    pub async fn is_order_fully_complete(&self, order_hash: &str) -> Result<bool, OrderbookError> {
+        let query = r#"
+        SELECT 
+            (src_escrow_address IS NULL OR status = 'source_settled') AS src_settled,
+            (dst_escrow_address IS NULL OR status = 'destination_settled') AS dst_settled
+        FROM orders 
+        WHERE order_hash = $1
+    "#;
+
+        let row = sqlx::query(query)
+            .bind(self.normalize_order_hash(order_hash))
+            .fetch_optional(&self.pool)
+            .await?;
+
+        match row {
+            Some(row) => {
+                let src_settled: bool = row.get("src_settled");
+                let dst_settled: bool = row.get("dst_settled");
+                Ok(src_settled && dst_settled)
+            }
+            None => Ok(false), // Order not found
+        }
     }
 }

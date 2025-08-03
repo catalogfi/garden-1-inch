@@ -1,25 +1,33 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 
-use alloy::{json_abi::JsonAbi, primitives::Address, providers::Provider, rpc::types::Filter};
+use alloy::{
+    dyn_abi::DynSolValue,
+    hex,
+    json_abi::JsonAbi,
+    primitives::Address,
+    rpc::types::{Filter, Log},
+};
 use tokio::time::interval;
 use tracing::{error, info, warn};
 
 use crate::{
     chains::{
-        ethereum::{EthereumChain, decode_log_with_abi},
+        ethereum::decode_log_with_abi,
         impls::withdrawal::{ParamOne, WithdrawalEvent},
-        traits::Chain,
     },
     config::WatcherConfig,
     orderbook::provider::OrderbookProvider,
+    types::{ChainType, OrderStatus},
+    watchers::escrow::EscrowWatcher,
 };
 
 const ESCROW_MONITOR_INTERVAL: u64 = 5;
 
 pub struct EscrowMonitor {
     db: Arc<OrderbookProvider>,
-    chains: HashMap<i64, EthereumChain>,
+    chains: HashMap<i64, EscrowWatcher>,
     escrow_abi: JsonAbi,
+    completed_orders: Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>,
 }
 
 impl EscrowMonitor {
@@ -30,21 +38,24 @@ impl EscrowMonitor {
     ) -> anyhow::Result<Self> {
         let mut chains = HashMap::new();
 
+        // Initialize EVM chains
         for evm_config in &config.chains.evm {
             if !evm_config.rpc_url.is_empty() {
-                let chain = EthereumChain::new(
+                let chain = EscrowWatcher::new(
                     evm_config.rpc_url.clone(),
                     String::new(),
+                    ChainType::Ethereum(evm_config.name.to_string()),
                     db.clone(),
                     0,
                     escrow_abi.clone(),
+                    evm_config.chain_id.try_into().unwrap(),
                 )
                 .await?;
 
                 chains.insert(evm_config.chain_id.try_into().unwrap(), chain);
                 info!(
-                    "Initialized escrow monitor for chain {}",
-                    evm_config.chain_id
+                    "Initialized escrow monitor for chain {} ({})",
+                    evm_config.name, evm_config.chain_id
                 );
             }
         }
@@ -53,6 +64,7 @@ impl EscrowMonitor {
             db,
             chains,
             escrow_abi,
+            completed_orders: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
         })
     }
 
@@ -71,26 +83,30 @@ impl EscrowMonitor {
     }
 
     async fn monitor_escrows(&self) -> anyhow::Result<()> {
-        let escrow_addresses_by_chain = self
+        // Get active escrow addresses with order hashes from your existing method
+        let escrow_data_by_chain = self
             .db
-            .get_escrow_addresses_by_chain()
+            .get_escrow_addresses_with_order_hashes_by_chain()
             .await
-            .expect("Unable to get the escrow address by chain");
+            .map_err(|e| anyhow::anyhow!("Unable to get escrow addresses by chain: {}", e))?;
 
-        if escrow_addresses_by_chain.is_empty() {
+        if escrow_data_by_chain.is_empty() {
             info!("No pending escrows to monitor");
             return Ok(());
         }
 
         info!(
             "Monitoring {} chains with escrows",
-            escrow_addresses_by_chain.len()
+            escrow_data_by_chain.len()
         );
 
         // Monitor each chain's escrows
-        for (chain_id, escrow_addresses) in escrow_addresses_by_chain {
+        for (chain_id, escrow_data) in escrow_data_by_chain {
             if let Some(chain) = self.chains.get(&chain_id) {
-                if let Err(e) = self.monitor_chain_escrows(chain, &escrow_addresses).await {
+                if let Err(e) = self
+                    .monitor_chain_escrows(chain, &escrow_data, chain_id)
+                    .await
+                {
                     error!("Error monitoring escrows for chain {}: {}", chain_id, e);
                 }
             } else {
@@ -103,142 +119,217 @@ impl EscrowMonitor {
 
     async fn monitor_chain_escrows(
         &self,
-        chain: &EthereumChain,
-        escrow_addresses: &[String],
+        chain: &EscrowWatcher,
+        escrow_data: &[(String, String)], // (escrow_address, order_hash)
+        chain_id: i64,
     ) -> anyhow::Result<()> {
-        info!(
-            "Monitoring {} escrow addresses on chain",
-            escrow_addresses.len(),
-        );
+        let mut active_escrows = Vec::new();
 
-        // Get current block number
-        let latest_block = chain.client.get_block_number().await?;
-        let from_block = latest_block.saturating_sub(100); // Look back 100 blocks
+        for (escrow_addr, order_hash) in escrow_data {
+            // Skip if marked completed in our local cache
+            {
+                let completed_orders = self.completed_orders.read().await;
+                if completed_orders.contains(order_hash) {
+                    info!("Order {} already completed, skipping", order_hash);
+                    continue;
+                }
+            }
 
-        // Create addresses for filtering
-        let addresses: Result<Vec<Address>, _> = escrow_addresses
-            .iter()
-            .map(|addr| Address::from_str(addr))
-            .collect();
+            let order_status = self.db.get_order_status(order_hash).await?;
 
-        let addresses = addresses?;
+            // Decision matrix for single status field
+            let should_monitor = match order_status.as_str() {
+                
+                "source_settled" => {
+                    // Only monitor destination escrow if exists
+                    let is_destination = self
+                        .db
+                        .is_escrow_destination(order_hash, escrow_addr)
+                        .await?;
+                    is_destination
+                }
+                "destination_settled" => {
+                    // Only monitor source escrow if exists
+                    let is_source = self.db.is_escrow_source(order_hash, escrow_addr).await?;
+                    is_source
+                }
+                "source_filled" | "destination_filled" => true, // Monitor both
+                _ => false, // Other statuses don't need monitoring
+            };
 
-        if addresses.is_empty() {
-            return Ok(());
-        }
-
-        // Create filter for withdrawal events from these escrow addresses
-        let filter = Filter::new()
-            .from_block(from_block)
-            .to_block(latest_block)
-            .address(addresses);
-
-        // Get logs from all escrow addresses
-        let logs = chain.client.get_logs(&filter).await?;
-
-        if !logs.is_empty() {
-            info!("Found {} logs from escrow addresses", logs.len());
-        }
-
-        // Process each log
-        for log in logs {
-            if let Err(e) = chain.process_log(log).await {
-                error!("Error processing withdrawal log: {}", e);
+            if should_monitor {
+                active_escrows.push((escrow_addr.clone(), order_hash.clone()));
+            } else {
+                info!(
+                    "Order {} escrow {} doesn't need monitoring (status: {})",
+                    order_hash, escrow_addr, order_status
+                );
             }
         }
 
-        Ok(())
-    }
-}
-
-// Enhanced trait for escrow-specific monitoring
-#[async_trait::async_trait]
-pub trait EscrowMonitorable {
-    async fn monitor_specific_escrows(&self, escrow_addresses: &[String]) -> anyhow::Result<()>;
-    async fn get_withdrawal_events(
-        &self,
-        escrow_addresses: &[String],
-        from_block: u64,
-        to_block: u64,
-    ) -> anyhow::Result<Vec<WithdrawalEvent>>;
-}
-
-#[async_trait::async_trait]
-impl EscrowMonitorable for EthereumChain {
-    async fn monitor_specific_escrows(&self, escrow_addresses: &[String]) -> anyhow::Result<()> {
-        if escrow_addresses.is_empty() {
+        if active_escrows.is_empty() {
+            info!("No active escrows to monitor on chain {}", chain_id);
             return Ok(());
         }
 
-        let latest_block = self.client.get_block_number().await?;
-        let from_block = latest_block.saturating_sub(50); // Check last 50 blocks
+        info!(
+            "Monitoring {} escrow addresses on chain {}",
+            active_escrows.len(),
+            chain_id
+        );
 
-        // Create filter for these specific escrow addresses
-        let addresses: Result<Vec<Address>, _> = escrow_addresses
+        // 2. Prepare for blockchain query
+        let latest_block = match chain.get_block_number().await {
+            Ok(block) => block,
+            Err(e) => {
+                error!("Failed to get latest block for chain {}: {}", chain_id, e);
+                return Ok(());
+            }
+        };
+        let from_block = latest_block.saturating_sub(100); // Look back 100 blocks
+
+        // Convert escrow addresses to Address type
+        let addresses: Vec<Address> = active_escrows
             .iter()
-            .map(|addr| Address::from_str(addr))
+            .filter_map(|(addr, _)| Address::from_str(addr).ok())
             .collect();
 
-        let addresses = addresses?;
+        if addresses.is_empty() {
+            warn!("No valid escrow addresses to monitor on chain {}", chain_id);
+            return Ok(());
+        }
 
+        // 3. Query blockchain for events
         let filter = Filter::new()
             .from_block(from_block)
             .to_block(latest_block)
             .address(addresses);
 
-        let logs = self.client.get_logs(&filter).await?;
+        let logs = match chain.get_logs(&filter).await {
+            Ok(logs) => logs,
+            Err(e) => {
+                error!("Failed to get logs for chain {}: {}", chain_id, e);
+                return Ok(());
+            }
+        };
 
-        for log in logs {
-            self.process_log(log).await?;
+        if !logs.is_empty() {
+            info!(
+                "Found {} logs from escrow addresses on chain {}",
+                logs.len(),
+                chain_id
+            );
         }
 
-        Ok(())
-    }
-
-    async fn get_withdrawal_events(
-        &self,
-        escrow_addresses: &[String],
-        from_block: u64,
-        to_block: u64,
-    ) -> anyhow::Result<Vec<WithdrawalEvent>> {
-        let addresses: Result<Vec<Address>, _> = escrow_addresses
-            .iter()
-            .map(|addr| Address::from_str(addr))
-            .collect();
-
-        let addresses = addresses?;
-
-        let filter = Filter::new()
-            .from_block(from_block)
-            .to_block(to_block)
-            .address(addresses);
-
-        let logs = self.client.get_logs(&filter).await?;
-        let mut withdrawal_events = Vec::new();
-
+        // 4. Process each log found
         for log in logs {
-            if let Some((event_name, decoded_event)) = decode_log_with_abi(&self.abi, &log)? {
-                if event_name == "Withdrawal" {
-                    let body = decoded_event.body;
-                    if body.len() >= 2 {
-                        if let (
-                            alloy::dyn_abi::DynSolValue::FixedBytes(secret, _),
-                            alloy::dyn_abi::DynSolValue::FixedBytes(order_hash_bytes, _),
-                        ) = (&body[0], &body[1])
-                        {
-                            let withdrawal_event = WithdrawalEvent {
-                                param_one: ParamOne {
-                                    secret: alloy::hex::encode(secret),
-                                    order_hash: alloy::hex::encode(order_hash_bytes),
-                                },
-                            };
-                            withdrawal_events.push(withdrawal_event);
-                        }
-                    }
+            let log_address = format!("0x{}", hex::encode(log.address()));
+
+            // Find matching order hash for this escrow
+            let Some((_, order_hash)) =
+                active_escrows.iter().find(|(addr, _)| *addr == log_address)
+            else {
+                warn!("No matching order found for escrow {}", log_address);
+                continue;
+            };
+
+            match self
+                .handle_withdrawn_event(chain, &log, &active_escrows, chain_id)
+                .await
+            {
+                Ok(_) => {
+                    // Mark order as completed in our tracking
+                    let mut completed = self.completed_orders.write().await;
+                    completed.insert(order_hash.clone());
+                    info!("Successfully processed withdrawal for order {}", order_hash);
+                }
+                Err(e) => {
+                    error!("Error processing withdrawal log: {}", e);
                 }
             }
         }
 
-        Ok(withdrawal_events)
+        Ok(())
+    }
+    async fn handle_withdrawn_event(
+        &self,
+        chain: &EscrowWatcher,
+        log: &Log,
+        active_escrows: &[(String, String)],
+        chain_id: i64,
+    ) -> anyhow::Result<()> {
+        // Decode the log using the escrow ABI
+        let decoded = decode_log_with_abi(&self.escrow_abi, &log)
+            .map_err(|e| anyhow::anyhow!("Failed to decode log: {}", e))?;
+
+        let (event_name, decoded_event) = match decoded {
+            Some(val) => val,
+            None => return Err(anyhow::anyhow!("No matching event found in ABI for log")),
+        };
+
+        // Verify we're processing the correct event
+        if event_name != "Withdrawal" {
+            return Err(anyhow::anyhow!(
+                "Expected Withdrawal event, got {}",
+                event_name
+            ));
+        }
+
+        let body = decoded_event.body;
+        if body.len() != 2 {
+            return Err(anyhow::anyhow!(
+                "Expected 2 parameters for Withdrawal event, got {}",
+                body.len()
+            ));
+        }
+
+        let escrow_address = format!("0x{}", hex::encode(log.address()));
+        let normalized_escrow = self.db.normalize_address(&escrow_address);
+
+        let event_order_hash = match &body[1] {
+            DynSolValue::FixedBytes(order_hash_bytes, _) => {
+                format!("{}", hex::encode(order_hash_bytes))
+            }
+            _ => return Err(anyhow::anyhow!("Parameter 1 should be FixedBytes")),
+        };
+
+        let escrow_address = format!("0x{}", hex::encode(log.address()));
+
+        // Find the matching order hash for this escrow address
+        let order_hash = active_escrows
+            .iter()
+            .find(|(addr, _)| self.db.normalize_address(addr) == normalized_escrow)
+            .map(|(_, hash)| hash)
+            .ok_or_else(|| anyhow::anyhow!("No matching order hash found for escrow address"))?;
+
+        // // Verify the order hash matches the event's order hash
+        // if order_hash != &event_order_hash {
+        //     return Err(anyhow::anyhow!(
+        //         "Order hash mismatch: expected {}, got {}",
+        //         order_hash,
+        //         event_order_hash
+        //     ));
+        // }
+        let status = self
+            .db
+            .determine_withdrawal_status(&event_order_hash, &escrow_address)
+            .await?;
+
+        self.db
+            .update_order_status(&order_hash, status)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to update status: {}", e))?;
+
+        if self.db.is_order_fully_complete(&order_hash).await? {
+            let mut completed = self.completed_orders.write().await;
+            completed.insert(order_hash.clone());
+        }
+
+        info!(
+            "Successfully processed withdrawal for order hash: {} on chain {}",
+            event_order_hash, chain_id
+        );
+
+        Ok(())
     }
 }

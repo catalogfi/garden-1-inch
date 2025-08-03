@@ -108,6 +108,7 @@ async fn start_factory_watchers(
     Ok(())
 }
 
+
 async fn start_escrow_monitor(
     config: WatcherConfig,
     db: Arc<OrderbookProvider>,

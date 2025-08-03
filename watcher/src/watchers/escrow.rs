@@ -1,18 +1,23 @@
-use std::sync::Arc;
-
-use alloy::json_abi::JsonAbi;
-use tracing::info;
-
 use crate::{
     chains::{ethereum::EthereumChain, starknet::StarknetChain, traits::Chain},
     orderbook::provider::OrderbookProvider,
     types::ChainType,
     watchers::factory::ChainWatcher,
 };
+use alloy::{
+    json_abi::JsonAbi,
+    primitives::Address,
+    providers::Provider,
+    rpc::types::{Filter, Log},
+};
+use anyhow::Ok;
+use std::sync::Arc;
+use tracing::info;
 
 pub struct EscrowWatcher {
     chain: ChainWatcher,
     chain_name: String,
+    chain_id: i64,
 }
 
 impl EscrowWatcher {
@@ -23,6 +28,7 @@ impl EscrowWatcher {
         db: Arc<OrderbookProvider>,
         start_block: u64,
         abi: JsonAbi,
+        chain_id: i64,
     ) -> anyhow::Result<Self> {
         let chain_name = chain_type.name().to_string();
 
@@ -35,7 +41,11 @@ impl EscrowWatcher {
             ),
         };
 
-        Ok(Self { chain, chain_name })
+        Ok(Self {
+            chain,
+            chain_name,
+            chain_id,
+        })
     }
 
     pub async fn start(&mut self) -> anyhow::Result<()> {
@@ -50,8 +60,57 @@ impl EscrowWatcher {
     pub fn chain_name(&self) -> &str {
         &self.chain_name
     }
+
+    pub fn chain_id(&self) -> i64 {
+        self.chain_id
+    }
+
+    pub async fn get_block_number(&self) -> anyhow::Result<u64> {
+        match &self.chain {
+            ChainWatcher::Ethereum(chain) => Ok(chain.client.get_block_number().await?),
+            ChainWatcher::Starknet(chain) => {
+                // You'll need to implement this for Starknet
+                // For now, return a placeholder
+                Ok(0)
+            }
+        }
+    }
+
+    pub async fn get_logs(&self, filter: &Filter) -> anyhow::Result<Vec<Log>> {
+        match &self.chain {
+            ChainWatcher::Ethereum(chain) => Ok(chain.client.get_logs(filter).await?),
+            ChainWatcher::Starknet(_chain) => {
+                // You'll need to implement this for Starknet
+                // For now, return empty vec
+                Ok(vec![])
+            }
+        }
+    }
+
+    pub async fn process_log(&self, log: Log) -> anyhow::Result<()> {
+        match &self.chain {
+            ChainWatcher::Ethereum(chain) => chain.process_log(log).await,
+            ChainWatcher::Starknet(chain) => Ok(()),
+        }
+    }
+
+    // Add method to get the underlying client for more complex operations
+    pub fn get_ethereum_chain(&self) -> Option<&EthereumChain> {
+        match &self.chain {
+            ChainWatcher::Ethereum(chain) => Some(chain),
+            ChainWatcher::Starknet(_) => None,
+        }
+    }
+
+    pub fn get_starknet_chain(&self) -> Option<&StarknetChain> {
+        match &self.chain {
+            ChainWatcher::Ethereum(_) => None,
+            ChainWatcher::Starknet(chain) => Some(chain),
+        }
+    }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::Value;
@@ -66,6 +125,7 @@ mod tests {
             .connect(db_url)
             .await?;
         let db = Arc::new(OrderbookProvider::new(pool));
+
         let json_abi = load_abi(Path::new("src/abi/escrow_src.json"))?;
 
         let mut watcher = EscrowWatcher::new(
@@ -75,6 +135,7 @@ mod tests {
             db,
             29196316,
             json_abi,
+            84532,
         )
         .await?;
 
