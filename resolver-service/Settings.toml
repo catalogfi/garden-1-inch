@@ -2,17 +2,25 @@ orders_url = "http://0.0.0.0:4455"
 poll_interval = 5
 
 [chains.monad_testnet]
-chain_id = 10143
+chain_id = "10143"
 chain_type = "evm"
-resolver_contract_address = "0xB0b64e0b69CB82AB9cE7c9473a4FCeE2Ad91Fce3"
+resolver_contract_address = "0x2Ccb1d9b36c0dE06195169d34fD64427F735186b"
 provider = "https://rpc.ankr.com/monad_testnet"
 private_key = "#ENV:ETH_PRIVATE_KEY"
-assets = ["0xea2bb31ebb0aee264aba3730c8744d6bd76d37d0"]
+assets = ["0x19eAC199abcc6f8dDe59198fcA5d44513B519368"]
 
 [chains.base_sepolia]
-chain_id = 84532
+chain_id = "84532"
 chain_type = "evm"
 resolver_contract_address = "0xD7C1F4947a4cE0A79B146918233e306114e1A78A"
 provider = "https://base-sepolia-rpc.publicnode.com"
 private_key = "#ENV:ETH_PRIVATE_KEY"
-assets = ["0x6756682b6144018dea5416640a0d0e8783e33f60"]
+assets = ["0x19eAC199abcc6f8dDe59198fcA5d44513B519368"]
+
+[chains.etherlink]
+chain_id = "128123"
+chain_type = "evm"
+resolver_contract_address = "0x4dfaBf46CCDd6b36a275b0b22f5C2077120914C9"
+provider = "https://rpc.ankr.com/etherlink_testnet"
+private_key = "#ENV:ETH_PRIVATE_KEY"
+assets = ["0x19eAC199abcc6f8dDe59198fcA5d44513B519368"]

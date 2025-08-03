@@ -24,9 +24,9 @@ pub enum ActionType {
 
 pub struct OrderMapperBuilder {
     order_client: Option<OrdersClient>,
-    chain_resolvers: HashMap<u64, Box<dyn Resolver + Send + Sync>>,
-    supported_chains: HashSet<u64>,
-    supported_assets: HashMap<u64, HashSet<String>>,
+    chain_resolvers: HashMap<String, Box<dyn Resolver + Send + Sync>>,
+    supported_chains: HashSet<String>,
+    supported_assets: HashMap<String, HashSet<String>>,
     poll_interval: Duration,
     action_ttl: Duration,
 }
@@ -50,16 +50,16 @@ impl OrderMapperBuilder {
     }
 
     /// Add a chain resolver
-    pub fn add_chain_resolver(mut self, chain_id: u64, resolver: Box<dyn Resolver + Send + Sync>) -> Self {
+    pub fn add_chain_resolver(mut self, chain_id: String, resolver: Box<dyn Resolver + Send + Sync>) -> Self {
         self.chain_resolvers.insert(chain_id.clone(), resolver);
         self.supported_chains.insert(chain_id);
         self
     }
 
     /// Add multiple supported assets for a specific chain
-    pub fn add_supported_assets(mut self, chain_id: u64, assets: Vec<String>) -> Self {
+    pub fn add_supported_assets(mut self, chain_id: String, assets: Vec<String>) -> Self {
         for asset in assets {
-            self.supported_assets.entry(chain_id).or_insert_with(HashSet::new).insert(asset.to_lowercase());
+            self.supported_assets.entry(chain_id.clone()).or_insert_with(HashSet::new).insert(asset.to_lowercase());
         }
         self
     }
@@ -97,9 +97,9 @@ impl OrderMapperBuilder {
 }
 
 pub struct OrderMapper {
-    pub chain_resolvers: HashMap<u64, Box<dyn Resolver + Send + Sync>>, // Key by chain_id
-    pub supported_chains: HashSet<u64>, // Key by chain_id
-    pub supported_assets: HashMap<u64, HashSet<String>>, // chain_id -> supported assets
+    pub chain_resolvers: HashMap<String, Box<dyn Resolver + Send + Sync>>, // Key by chain_id
+    pub supported_chains: HashSet<String>, // Key by chain_id
+    pub supported_assets: HashMap<String, HashSet<String>>, // chain_id -> supported assets
     pub processing_orders: Cache<String, (ActionType, SystemTime)>, // Track last processed action and timestamp
     pub order_client: OrdersClient,
     pub poll_interval: Duration,
@@ -307,8 +307,6 @@ impl OrderMapper {
 
 
     fn is_supported_order(&self, order: &OrderDetail) -> bool {
-        tracing::info!("supported_chains: {:?}", self.supported_chains);
-        tracing::info!("supported_assets: {:?}", self.supported_assets);
         self.supported_chains.contains(&order.src_chain_id) &&
         self.supported_chains.contains(&order.dst_chain_id) &&
         self.supported_assets.get(&order.src_chain_id).map_or(false, |assets| assets.contains(&order.maker_asset.to_lowercase())) &&

@@ -51,7 +51,7 @@ impl ResolverContract {
 
 pub struct EvmResolver {
     contract: ResolverContract,
-    chain_id: u64,
+    chain_id: String,
 }
 
 
@@ -413,7 +413,7 @@ impl EvmResolver {
         );
         Self {
             contract,
-            chain_id: chain_settings.chain_id,
+            chain_id: chain_settings.chain_id.clone(),
         }
     }
 }
