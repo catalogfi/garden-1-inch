@@ -17,7 +17,7 @@ use tracing::info;
 pub struct EscrowWatcher {
     chain: ChainWatcher,
     chain_name: String,
-    chain_id: i64,
+    chain_id: String,
 }
 
 impl EscrowWatcher {
@@ -28,7 +28,7 @@ impl EscrowWatcher {
         db: Arc<OrderbookProvider>,
         start_block: u64,
         abi: JsonAbi,
-        chain_id: i64,
+        chain_id: String,
     ) -> anyhow::Result<Self> {
         let chain_name = chain_type.name().to_string();
 
@@ -61,8 +61,8 @@ impl EscrowWatcher {
         &self.chain_name
     }
 
-    pub fn chain_id(&self) -> i64 {
-        self.chain_id
+    pub fn chain_id(&self) -> String {
+        self.chain_id.to_string()
     }
 
     pub async fn get_block_number(&self) -> anyhow::Result<u64> {
@@ -135,7 +135,7 @@ mod tests {
             db,
             29196316,
             json_abi,
-            84532,
+            "84532".to_string(),
         )
         .await?;
 

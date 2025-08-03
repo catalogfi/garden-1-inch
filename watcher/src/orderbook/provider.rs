@@ -16,8 +16,8 @@ pub struct PendingOrder {
     pub order_hash: String,
     pub src_escrow_address: Option<String>,
     pub dst_escrow_address: Option<String>,
-    pub src_chain_id: i64,
-    pub dst_chain_id: i64,
+    pub src_chain_id: String,
+    pub dst_chain_id: String,
     pub status: String,
 }
 
@@ -99,8 +99,8 @@ impl OrderbookProvider {
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 order_hash VARCHAR(66) UNIQUE NOT NULL,
                 quote_id VARCHAR(255) NOT NULL,
-                src_chain_id BIGINT NOT NULL,
-                dst_chain_id BIGINT NOT NULL,
+                src_chain_id VARCHAR(256) NOT NULL,
+                dst_chain_id VARCHAR(256) NOT NULL,
                 maker VARCHAR(42) NOT NULL,
                 receiver VARCHAR(42) NOT NULL,
                 maker_asset VARCHAR(42) NOT NULL,
@@ -369,29 +369,29 @@ impl OrderbookProvider {
     /// Get escrow addresses grouped by chain for efficient monitoring
     pub async fn get_escrow_addresses_by_chain(
         &self,
-    ) -> Result<std::collections::HashMap<i64, Vec<String>>, OrderbookError> {
+    ) -> Result<std::collections::HashMap<String, Vec<String>>, OrderbookError> {
         let query = r#"
-            SELECT DISTINCT src_chain_id as chain_id, src_escrow_address as escrow_address
-            FROM orders 
-            WHERE src_escrow_address IS NOT NULL 
-            AND status NOT IN ('unmatched', 'expired', 'source_settled', 'destination_settled', 'cancelled')
-            AND deadline > EXTRACT(EPOCH FROM NOW())
-            
-            UNION
-            
-            SELECT DISTINCT dst_chain_id as chain_id, dst_escrow_address as escrow_address
-            FROM orders 
-            WHERE dst_escrow_address IS NOT NULL 
-            AND status NOT IN ('unmatched', 'expired', 'source_settled', 'destination_settled', 'cancelled')
-            AND deadline > EXTRACT(EPOCH FROM NOW())
-        "#;
+        SELECT DISTINCT src_chain_id as chain_id, src_escrow_address as escrow_address
+        FROM orders 
+        WHERE src_escrow_address IS NOT NULL 
+        AND status NOT IN ('unmatched', 'expired', 'source_settled', 'destination_settled', 'cancelled')
+        AND deadline > EXTRACT(EPOCH FROM NOW())
+        
+        UNION
+        
+        SELECT DISTINCT dst_chain_id as chain_id, dst_escrow_address as escrow_address
+        FROM orders 
+        WHERE dst_escrow_address IS NOT NULL 
+        AND status NOT IN ('unmatched', 'expired', 'source_settled', 'destination_settled', 'cancelled')
+        AND deadline > EXTRACT(EPOCH FROM NOW())
+    "#;
 
         let rows = sqlx::query(query).fetch_all(&self.pool).await?;
 
         let mut chain_escrows = std::collections::HashMap::new();
 
         for row in rows {
-            let chain_id: i64 = row.get("chain_id");
+            let chain_id: String = row.get("chain_id");
             let escrow_address: String = row.get("escrow_address");
 
             chain_escrows
@@ -405,57 +405,41 @@ impl OrderbookProvider {
 
     pub async fn get_escrow_addresses_with_order_hashes_by_chain(
         &self,
-    ) -> Result<std::collections::HashMap<i64, Vec<(String, String)>>, OrderbookError> {
-        // let query = r#"
-        //     SELECT src_chain_id as chain_id, src_escrow_address as escrow_address, order_hash
-        //     FROM orders
-        //     WHERE src_escrow_address IS NOT NULL
-        //     AND status IN ('source_filled', 'destination_filled')
-        //     AND deadline > EXTRACT(EPOCH FROM NOW())
-
-        //     UNION
-
-        //     SELECT dst_chain_id as chain_id, dst_escrow_address as escrow_address, order_hash
-        //     FROM orders
-        //     WHERE dst_escrow_address IS NOT NULL
-        //     AND status IN ('source_filled', 'destination_filled')
-        //     AND deadline > EXTRACT(EPOCH FROM NOW())
-        // "#;
-
+    ) -> Result<std::collections::HashMap<String, Vec<(String, String)>>, OrderbookError> {
         let query = r#"
-    SELECT src_chain_id as chain_id, 
-           LOWER(src_escrow_address) as escrow_address, 
-           LOWER(order_hash) as order_hash
-    FROM orders 
-    WHERE src_escrow_address IS NOT NULL 
-    AND (
-        (status IN ('source_filled', 'destination_filled')) OR
-        (status = 'source_settled' AND dst_escrow_address IS NOT NULL) OR
-        (status = 'destination_settled' AND src_escrow_address IS NOT NULL)
-    )
-    AND deadline > EXTRACT(EPOCH FROM NOW())
+        SELECT src_chain_id as chain_id, 
+               LOWER(src_escrow_address) as escrow_address, 
+               LOWER(order_hash) as order_hash
+        FROM orders 
+        WHERE src_escrow_address IS NOT NULL 
+        AND (
+            (status IN ('source_filled', 'destination_filled')) OR
+            (status = 'source_settled' AND dst_escrow_address IS NOT NULL) OR
+            (status = 'destination_settled' AND src_escrow_address IS NOT NULL)
+        )
+        AND deadline > EXTRACT(EPOCH FROM NOW())
 
-    UNION
+        UNION
 
-    SELECT dst_chain_id as chain_id, 
-           LOWER(dst_escrow_address) as escrow_address, 
-           LOWER(order_hash) as order_hash
-    FROM orders 
-    WHERE dst_escrow_address IS NOT NULL 
-    AND (
-        (status IN ('source_filled', 'destination_filled')) OR
-        (status = 'destination_settled' AND src_escrow_address IS NOT NULL) OR
-        (status = 'source_settled' AND dst_escrow_address IS NOT NULL)
-    )
-    AND deadline > EXTRACT(EPOCH FROM NOW())
-"#;
+        SELECT dst_chain_id as chain_id, 
+               LOWER(dst_escrow_address) as escrow_address, 
+               LOWER(order_hash) as order_hash
+        FROM orders 
+        WHERE dst_escrow_address IS NOT NULL 
+        AND (
+            (status IN ('source_filled', 'destination_filled')) OR
+            (status = 'destination_settled' AND src_escrow_address IS NOT NULL) OR
+            (status = 'source_settled' AND dst_escrow_address IS NOT NULL)
+        )
+        AND deadline > EXTRACT(EPOCH FROM NOW())
+    "#;
 
         let rows = sqlx::query(query).fetch_all(&self.pool).await?;
 
         let mut chain_escrows = std::collections::HashMap::new();
 
         for row in rows {
-            let chain_id: i64 = row.get("chain_id");
+            let chain_id: String = row.get("chain_id");
             let escrow_address: String = row.get("escrow_address");
             let order_hash: String = row.get("order_hash");
 

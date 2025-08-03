@@ -25,7 +25,7 @@ const ESCROW_MONITOR_INTERVAL: u64 = 5;
 
 pub struct EscrowMonitor {
     db: Arc<OrderbookProvider>,
-    chains: HashMap<i64, EscrowWatcher>,
+    chains: HashMap<String, EscrowWatcher>,
     escrow_abi: JsonAbi,
     completed_orders: Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>,
 }
@@ -48,11 +48,11 @@ impl EscrowMonitor {
                     db.clone(),
                     0,
                     escrow_abi.clone(),
-                    evm_config.chain_id.try_into().unwrap(),
+                    evm_config.chain_id.to_string(),
                 )
                 .await?;
 
-                chains.insert(evm_config.chain_id.try_into().unwrap(), chain);
+                chains.insert(evm_config.chain_id.to_string(), chain);
                 info!(
                     "Initialized escrow monitor for chain {} ({})",
                     evm_config.name, evm_config.chain_id
@@ -104,7 +104,7 @@ impl EscrowMonitor {
         for (chain_id, escrow_data) in escrow_data_by_chain {
             if let Some(chain) = self.chains.get(&chain_id) {
                 if let Err(e) = self
-                    .monitor_chain_escrows(chain, &escrow_data, chain_id)
+                    .monitor_chain_escrows(chain, &escrow_data, chain_id.to_string())
                     .await
                 {
                     error!("Error monitoring escrows for chain {}: {}", chain_id, e);
@@ -121,7 +121,7 @@ impl EscrowMonitor {
         &self,
         chain: &EscrowWatcher,
         escrow_data: &[(String, String)], // (escrow_address, order_hash)
-        chain_id: i64,
+        chain_id: String,
     ) -> anyhow::Result<()> {
         let mut active_escrows = Vec::new();
 
@@ -139,7 +139,6 @@ impl EscrowMonitor {
 
             // Decision matrix for single status field
             let should_monitor = match order_status.as_str() {
-                
                 "source_settled" => {
                     // Only monitor destination escrow if exists
                     let is_destination = self
@@ -234,7 +233,7 @@ impl EscrowMonitor {
             };
 
             match self
-                .handle_withdrawn_event(chain, &log, &active_escrows, chain_id)
+                .handle_withdrawn_event(chain, &log, &active_escrows, chain_id.to_string())
                 .await
             {
                 Ok(_) => {
@@ -256,7 +255,7 @@ impl EscrowMonitor {
         chain: &EscrowWatcher,
         log: &Log,
         active_escrows: &[(String, String)],
-        chain_id: i64,
+        chain_id: String,
     ) -> anyhow::Result<()> {
         // Decode the log using the escrow ABI
         let decoded = decode_log_with_abi(&self.escrow_abi, &log)

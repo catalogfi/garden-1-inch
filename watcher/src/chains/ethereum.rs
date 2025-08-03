@@ -17,7 +17,7 @@ use tokio::time::sleep;
 use tracing::{error, info};
 
 const MAX_BLOCK_SPAN: u64 = 50;
-const POLLING_INTERVAL: u64 = 5;
+const POLLING_INTERVAL: u64 = 10;
 
 #[derive(Debug)]
 pub struct EthereumChain {
