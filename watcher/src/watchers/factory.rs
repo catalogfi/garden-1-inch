@@ -141,6 +141,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_etherlink_chain() -> anyhow::Result<()> {
+        tracing_subscriber::fmt::init();
+        let db_url = "postgresql://postgres:e4cqtvu2sHlmwEuy5wSG2ZkINrnxyLNSWpLikE8szXPly4X2NqWfkFKp48y3KKQn@162.55.81.185:3129/postgres";
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(5)
+            .connect(db_url)
+            .await?;
+        let db = Arc::new(OrderbookProvider::new(pool));
+
+        let factory_abi: JsonAbi = load_abi(Path::new("src/abi/escrow_factory.json"))?;
+
+        let mut watcher = FactoryWatcher::new(
+            "https://rpc.ankr.com/etherlink_testnet".to_string(),
+            "0x30d24e9d1Fbffad6883E8632c5ad4216c9A86dFC".to_string(),
+            ChainType::Ethereum("etherlink".to_string()),
+            db,
+            20891277,
+            &factory_abi,
+        )
+        .await?;
+
+        watcher.start().await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_starknet_chain() -> anyhow::Result<()> {
         tracing_subscriber::fmt::init();
         let db_url = "postgres://king:mangarock@localhost:5432/wallet_db";

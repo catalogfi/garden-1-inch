@@ -16,7 +16,7 @@ use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::time::sleep;
 use tracing::{error, info};
 
-const MAX_BLOCK_SPAN: u64 = 100;
+const MAX_BLOCK_SPAN: u64 = 50;
 const POLLING_INTERVAL: u64 = 5;
 
 #[derive(Debug)]
@@ -91,27 +91,44 @@ impl Chain for EthereumChain {
         while current_block < latest_block {
             let next_block = std::cmp::min(current_block + MAX_BLOCK_SPAN, latest_block);
 
+            if next_block - current_block > MAX_BLOCK_SPAN {
+                error!(
+                    "Block range too large: {} blocks (max allowed: {})",
+                    next_block - current_block,
+                    MAX_BLOCK_SPAN
+                );
+                return Err(anyhow::anyhow!("Block range too large"));
+            }
+
             let filter = Filter::new()
                 .from_block(current_block)
                 .to_block(next_block)
                 .address(alloy::primitives::Address::from_str(
                     &self.contract_address,
                 )?);
-
-            let logs = self.client.get_logs(&filter).await?;
-
-            for log in logs {
-                // info!("Found log: {:#?}", log);
-                self.process_log(log).await?;
+            match self.client.get_logs(&filter).await {
+                Ok(logs) => {
+                    for log in logs {
+                        self.process_log(log).await?;
+                    }
+                    current_block = next_block + 1;
+                }
+                Err(e) => {
+                    error!("Error fetching logs: {}", e);
+                    if MAX_BLOCK_SPAN > 10 {
+                        error!("Reducing block span and retrying...");
+                        sleep(Duration::from_secs(1)).await;
+                        continue;
+                    } else {
+                        return Err(e.into());
+                    }
+                }
             }
-
-            current_block = next_block + 1;
         }
 
         self.last_block = Some(latest_block);
         Ok(())
     }
-
     async fn get_block_timestamp(&self, block_number: u64) -> anyhow::Result<u64> {
         let block = self.client.get_block(block_number.into()).await?;
         if block.is_none() {

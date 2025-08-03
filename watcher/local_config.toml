@@ -18,6 +18,14 @@ contract_address = "0xa62dF4c42fFd8a352436461f3A3542bF2EFb06bF"
 start_block = 29060696
 
 
+[[chains.evm]]
+name = "etherlink"
+chain_id = 128123
+rpc_url = "https://rpc.ankr.com/etherlink_testnet"
+contract_address = "0x30d24e9d1Fbffad6883E8632c5ad4216c9A86dFC"
+start_block = 20891277
+
+
 [[chains.starknet]]
 name = ""
 chain_id = 0
