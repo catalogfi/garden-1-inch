@@ -108,14 +108,23 @@ async fn start_factory_watchers(
     Ok(())
 }
 
-
 async fn start_escrow_monitor(
     config: WatcherConfig,
     db: Arc<OrderbookProvider>,
 ) -> anyhow::Result<()> {
     tracing::info!("Starting escrow monitor service");
     let escrow_abi = load_abi(Path::new("src/abi/escrow_src.json"))?;
-    let mut monitor = EscrowMonitor::new(db.clone(), &config, escrow_abi).await?;
+
+    let start_block = config
+        .chains
+        .evm
+        .iter()
+        // .chain(config.chains.starknet.iter())
+        .map(|chain| chain.start_block)
+        .min()
+        .unwrap_or(0);
+
+    let mut monitor = EscrowMonitor::new(db.clone(), &config, escrow_abi, start_block).await?;
 
     tokio::spawn(async move {
         if let Err(e) = monitor.start().await {
@@ -126,7 +135,6 @@ async fn start_escrow_monitor(
     tracing::info!("Escrow monitor started successfully");
     Ok(())
 }
-
 pub fn load_abi(path: &Path) -> anyhow::Result<JsonAbi> {
     let abi_content = fs::read_to_string(path)?;
     let full_json: Value = serde_json::from_str(&abi_content)?;

@@ -24,10 +24,11 @@ use crate::{
 const ESCROW_MONITOR_INTERVAL: u64 = 5;
 
 pub struct EscrowMonitor {
-    db: Arc<OrderbookProvider>,
-    chains: HashMap<String, EscrowWatcher>,
-    escrow_abi: JsonAbi,
-    completed_orders: Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>,
+    pub db: Arc<OrderbookProvider>,
+    pub chains: HashMap<String, EscrowWatcher>,
+    pub escrow_abi: JsonAbi,
+    pub completed_orders: Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>,
+    pub start_block: u64,
 }
 
 impl EscrowMonitor {
@@ -35,6 +36,7 @@ impl EscrowMonitor {
         db: Arc<OrderbookProvider>,
         config: &WatcherConfig,
         escrow_abi: JsonAbi,
+        start_block: u64,
     ) -> anyhow::Result<Self> {
         let mut chains = HashMap::new();
 
@@ -46,7 +48,7 @@ impl EscrowMonitor {
                     String::new(),
                     ChainType::Ethereum(evm_config.name.to_string()),
                     db.clone(),
-                    0,
+                    start_block,
                     escrow_abi.clone(),
                     evm_config.chain_id.to_string(),
                 )
@@ -65,6 +67,7 @@ impl EscrowMonitor {
             chains,
             escrow_abi,
             completed_orders: Arc::new(tokio::sync::RwLock::new(std::collections::HashSet::new())),
+            start_block,
         })
     }
 
@@ -116,7 +119,6 @@ impl EscrowMonitor {
 
         Ok(())
     }
-
     async fn monitor_chain_escrows(
         &self,
         chain: &EscrowWatcher,
@@ -137,10 +139,8 @@ impl EscrowMonitor {
 
             let order_status = self.db.get_order_status(order_hash).await?;
 
-            // Decision matrix for single status field
             let should_monitor = match order_status.as_str() {
                 "source_settled" => {
-                    // Only monitor destination escrow if exists
                     let is_destination = self
                         .db
                         .is_escrow_destination(order_hash, escrow_addr)
@@ -148,12 +148,11 @@ impl EscrowMonitor {
                     is_destination
                 }
                 "destination_settled" => {
-                    // Only monitor source escrow if exists
                     let is_source = self.db.is_escrow_source(order_hash, escrow_addr).await?;
                     is_source
                 }
-                "source_filled" | "destination_filled" => true, // Monitor both
-                _ => false, // Other statuses don't need monitoring
+                "source_filled" | "destination_filled" => true,
+                _ => false,
             };
 
             if should_monitor {
@@ -177,7 +176,6 @@ impl EscrowMonitor {
             chain_id
         );
 
-        // 2. Prepare for blockchain query
         let latest_block = match chain.get_block_number().await {
             Ok(block) => block,
             Err(e) => {
@@ -185,9 +183,7 @@ impl EscrowMonitor {
                 return Ok(());
             }
         };
-        let from_block = latest_block.saturating_sub(100); // Look back 100 blocks
 
-        // Convert escrow addresses to Address type
         let addresses: Vec<Address> = active_escrows
             .iter()
             .filter_map(|(addr, _)| Address::from_str(addr).ok())
@@ -198,58 +194,81 @@ impl EscrowMonitor {
             return Ok(());
         }
 
-        // 3. Query blockchain for events
-        let filter = Filter::new()
-            .from_block(from_block)
-            .to_block(latest_block)
-            .address(addresses);
+        let mut from_block = self.start_block;
+        let max_spam = 100;
 
-        let logs = match chain.get_logs(&filter).await {
-            Ok(logs) => logs,
-            Err(e) => {
-                error!("Failed to get logs for chain {}: {}", chain_id, e);
-                return Ok(());
-            }
-        };
+        while from_block <= latest_block {
+            let to_block = std::cmp::min(from_block + max_spam - 1, latest_block);
 
-        if !logs.is_empty() {
-            info!(
-                "Found {} logs from escrow addresses on chain {}",
-                logs.len(),
-                chain_id
-            );
-        }
+            info!("Querying blocks {} to {}", from_block, to_block);
 
-        // 4. Process each log found
-        for log in logs {
-            let log_address = format!("0x{}", hex::encode(log.address()));
+            let filter = Filter::new()
+                .from_block(from_block)
+                .to_block(to_block)
+                .address(addresses.clone());
 
-            // Find matching order hash for this escrow
-            let Some((_, order_hash)) =
-                active_escrows.iter().find(|(addr, _)| *addr == log_address)
-            else {
-                warn!("No matching order found for escrow {}", log_address);
-                continue;
-            };
+            match chain.get_logs(&filter).await {
+                Ok(logs) => {
+                    if !logs.is_empty() {
+                        info!(
+                            "Found {} logs from escrow addresses on chain {} (blocks {}-{})",
+                            logs.len(),
+                            chain_id,
+                            from_block,
+                            to_block
+                        );
+                    }
 
-            match self
-                .handle_withdrawn_event(chain, &log, &active_escrows, chain_id.to_string())
-                .await
-            {
-                Ok(_) => {
-                    // Mark order as completed in our tracking
-                    let mut completed = self.completed_orders.write().await;
-                    completed.insert(order_hash.clone());
-                    info!("Successfully processed withdrawal for order {}", order_hash);
+                    for log in logs {
+                        let log_address = format!("0x{}", hex::encode(log.address()));
+
+                        let Some((_, order_hash)) =
+                            active_escrows.iter().find(|(addr, _)| *addr == log_address)
+                        else {
+                            warn!("No matching order found for escrow {}", log_address);
+                            continue;
+                        };
+
+                        match self
+                            .handle_withdrawn_event(
+                                chain,
+                                &log,
+                                &active_escrows,
+                                chain_id.to_string(),
+                            )
+                            .await
+                        {
+                            Ok(_) => {
+                                // Mark order as completed in our tracking
+                                let mut completed = self.completed_orders.write().await;
+                                completed.insert(order_hash.clone());
+                                info!("Successfully processed withdrawal for order {}", order_hash);
+                            }
+                            Err(e) => {
+                                error!("Error processing withdrawal log: {}", e);
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
-                    error!("Error processing withdrawal log: {}", e);
+                    error!(
+                        "Failed to get logs for chain {} (blocks {}-{}): {}",
+                        chain_id, from_block, to_block, e
+                    );
+                    // Continue with next block range instead of returning
                 }
             }
+
+            // Update from_block for next iteration
+            from_block = to_block + 1;
+
+            // Small delay between requests to avoid rate limiting
+            tokio::time::sleep(Duration::from_millis(200)).await;
         }
 
         Ok(())
     }
+
     async fn handle_withdrawn_event(
         &self,
         chain: &EscrowWatcher,
