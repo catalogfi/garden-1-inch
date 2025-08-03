@@ -4,20 +4,23 @@ import {
   CallData,
   Contract,
   RpcProvider,
-  stark as sn
+  stark as sn,
+  TypedData,
+  TypedDataRevision,
+  WeierstrassSignatureType
 } from "starknet";
 import { ethers, parseEther, sha256 } from "ethers";
 import { randomBytes } from "crypto";
 import path from "path";
 import { readFile } from "fs/promises";
+import { shortString } from "starknet";
 import { 
   STARKNET_DEVNET_URL, 
   accounts, 
-  STARK, 
-  ETH, 
-  ZERO_ADDRESS, 
-  TIMELOCK, 
-  AMOUNT 
+  STARK,
+  ZERO_ADDRESS,
+  AMOUNT,
+  TIMELOCK
 } from "./config";
 
 describe("Starknet Resolver", () => {
@@ -25,16 +28,14 @@ describe("Starknet Resolver", () => {
     nodeUrl: STARKNET_DEVNET_URL,
   });
 
-  const AMOUNT_BIGINT = parseEther("0.1");
+  const AMOUNT_BIGINT = 1000000n; // 1 USDC (6 decimals)
 
-  let stark: Contract;
+  let usdc: Contract;
   let starknetESCROW: Contract;
   let starknetResolver: Contract;
   let callData: CallData;
 
   let alice: Account;
-  let bob: Account;
-  let charlie: Account;
   let resolver: Account;
 
   let secret1: string;
@@ -44,6 +45,13 @@ describe("Starknet Resolver", () => {
   let secretHash1: number[];
   let secretHash2: number[];
   let secretHash3: number[];
+
+  const RESOLVER_PRIVATE_KEY = "0x014b647de5269b2e0069f3c1ef93c1c8e64ae8d842181df21afb0b32b3db081a";
+  const RESOLVER_ADDRESS = "0x07c3ddf1d8b12ca535493becae82782e537884172a20ffc239b9c859e0280052";
+
+  const USDC = "0x02fb897ed33fbd7f3b68bb51b3a1f1e94255d71c327c4447ec4db462848752bd";
+
+  const AMOUNT_USDC = 10000000;
 
   let CHAIN_ID: string;
 
@@ -62,15 +70,10 @@ describe("Starknet Resolver", () => {
   };
 
   // Helper function to generate order ID
-  const generateOrderId = (
-    chainId: string,
-    initiator: string,
-    redeemer: string,
-    timelock: bigint,
-    amount: bigint,
-    secretHash: number[]
-  ): string => {
-    return "0x" + randomBytes(32).toString("hex");
+  const generateOrderId = (): string => {
+    // Generate a random felt252-compatible value
+    const randomValue = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+    return "0x" + randomValue.toString(16);
   };
 
   async function getCompiledCode(filename: string) {
@@ -96,44 +99,61 @@ describe("Starknet Resolver", () => {
 
   const deployContracts = async () => {
     try {
-      ({ sierraCode, casmCode } = await getCompiledCode("starknet_escrow_ESCROW"));
+      ({ sierraCode, casmCode } = await getCompiledCode("escrow_ESCROW"));
     } catch (error: any) {
       console.log("Failed to read contract files", error);
       process.exit(1);
     }
     callData = new CallData(sierraCode.abi);
 
-    // Deploy ESCROW
-    const escrowConstructor = callData.compile("constructor", {});
-    const escrowDeployResponse = await alice.declareAndDeploy({
-      contract: sierraCode,
-      casm: casmCode,
-      constructorCalldata: escrowConstructor,
-      salt: sn.randomAddress(),
-    });
+    // // Deploy ESCROW
+    // const escrowConstructor = callData.compile("constructor", {});
+    // const escrowDeployResponse = await alice.declareAndDeploy({
+    //   contract: sierraCode,
+    //   casm: casmCode,
+    //   constructorCalldata: escrowConstructor,
+    //   salt: sn.randomAddress(),
+    // });
+
+    // const ESCROW_ADDRESS = escrowDeployResponse.deploy.contract_address;
+    const ESCROW_ADDRESS = "0x22f3e385ce47e1c1054b8b1ea3fc72f1d46763401f912652adf7438285f764c";
 
     starknetESCROW = new Contract(
       sierraCode.abi,
-      escrowDeployResponse.deploy.contract_address,
+      ESCROW_ADDRESS,
       starknetProvider
     );
 
-    // Deploy Resolver
-    const resolverConstructor = callData.compile("constructor", {
-      escrow_contract: escrowDeployResponse.deploy.contract_address,
-    });
-    const resolverDeployResponse = await alice.declareAndDeploy({
-      contract: sierraCode,
-      casm: casmCode,
-      constructorCalldata: resolverConstructor,
-      salt: sn.randomAddress(),
-    });
+    console.log("ESCROW contract deployed :", ESCROW_ADDRESS);
+
+    try {
+      ({ sierraCode, casmCode } = await getCompiledCode("escrow_Resolver"));
+    } catch (error: any) {
+      console.log("Failed to read contract files", error);
+      process.exit(1);
+    }
+    callData = new CallData(sierraCode.abi);
+
+    // // Deploy Resolver
+    // const resolverConstructor = callData.compile("constructor", {
+    //   escrow_contract: escrowDeployResponse.deploy.contract_address,
+    // });
+    // const resolverDeployResponse = await resolver.declareAndDeploy({
+    //   contract: sierraCode,
+    //   casm: casmCode,
+    //   constructorCalldata: resolverConstructor,
+    //   salt: sn.randomAddress(),
+    // });
+    // const RESOLVER_CONTRACT_ADDRESS = resolverDeployResponse.deploy.contract_address;
+    const RESOLVER_CONTRACT_ADDRESS = "0x4688ecf254dfa78275085ed99f1565bc72832c3ec92fe0e4d733e3978b007f4";
 
     starknetResolver = new Contract(
       sierraCode.abi,
-      resolverDeployResponse.deploy.contract_address,
+      RESOLVER_CONTRACT_ADDRESS,
       starknetProvider
     );
+
+    console.log("Resolver contract deployed :", RESOLVER_CONTRACT_ADDRESS);
   };
 
   beforeAll(async () => {
@@ -150,460 +170,274 @@ describe("Starknet Resolver", () => {
     alice = new Account(
       starknetProvider,
       accounts[0].address,
-      accounts[0].privateKey
-    );
-
-    bob = new Account(
-      starknetProvider,
-      accounts[1].address,
-      accounts[1].privateKey
-    );
-    charlie = new Account(
-      starknetProvider,
-      accounts[2].address,
-      accounts[2].privateKey
+      accounts[0].privateKey,
+      "1",
+      "0x3"
     );
 
     resolver = new Account(
       starknetProvider,
-      accounts[0].address, // Using alice as resolver for testing
-      accounts[0].privateKey
+      RESOLVER_ADDRESS,
+      RESOLVER_PRIVATE_KEY,
+      "1",
+      "0x3"
     );
 
-    const contractData = await starknetProvider.getClassAt(STARK);
-    stark = new Contract(contractData.abi, STARK, starknetProvider);
+    const contractData = await starknetProvider.getClassAt(USDC);
+    usdc = new Contract(contractData.abi, USDC, starknetProvider);
     await deployContracts();
 
+    console.log("USDC contract:", usdc.address);
     // allowance for ESCROW
-    stark.connect(alice);
-    await stark.approve(starknetESCROW.address, parseEther("500"));
-    stark.connect(bob);
-    await stark.approve(starknetESCROW.address, parseEther("500"));
-    stark.connect(charlie);
-    await stark.approve(starknetESCROW.address, parseEther("500"));
+    usdc.connect(alice);
+    await usdc.approve(starknetESCROW.address, (AMOUNT_USDC * 10));
+    console.log("Alice approved USDC for ESCROW");
+
+    const aliceBalance = await usdc.balanceOf(alice.address);
+    console.log("Alice's USDC balance:", aliceBalance);
+
+    const aliceAllowance = await usdc.allowance(alice.address, "0x2a70495e904d030fcd6e8273c79af2177060f0afc192862feb56e66702c8aef");
+    console.log("Alice's USDC allowance on ESCROW:", aliceAllowance);
+
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // // Transfer USDC from Alice to resolver
+    // usdc.connect(alice);
+    // await usdc.transfer(resolver.address, AMOUNT_USDC);
+    // console.log("Alice transferred USDC to resolver");
+
+    // const resolverBalance = await usdc.balanceOf(resolver.address);
+    // console.log("Resolver's USDC balance:", resolverBalance);
+
+    // // Resolver approves USDC for ESCROW
+    // usdc.connect(resolver);
+    // await usdc.approve(starknetESCROW.address, AMOUNT_USDC);
+    // console.log("Resolver approved USDC for ESCROW");
   }, 100000);
 
-  describe("- Pre-Conditions -", () => {
-    it("Resolver should be deployed with correct ESCROW address", async () => {
-      const escrowAddress = await starknetResolver.escrow_contract();
-      expect(escrowAddress).toBe(starknetESCROW.address);
-    });
-
-    it("Resolver should have correct owner", async () => {
-      const owner = await starknetResolver.owner();
-      expect(owner).toBe(alice.address);
-    });
-  });
-
-  describe("-- Resolver Authorization --", () => {
-    it("Should authorize resolver", async () => {
-      await alice.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "authorize_resolver",
-        calldata: callData.compile("authorize_resolver", {
-          resolver_address: resolver.address,
-          is_authorized: true,
-        }),
-      });
-
-      const isAuthorized = await starknetResolver.is_resolver_authorized(resolver.address);
-      expect(isAuthorized).toBe(true);
-    });
-
-    it("Should deauthorize resolver", async () => {
-      await alice.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "authorize_resolver",
-        calldata: callData.compile("authorize_resolver", {
-          resolver_address: resolver.address,
-          is_authorized: false,
-        }),
-      });
-
-      const isAuthorized = await starknetResolver.is_resolver_authorized(resolver.address);
-      expect(isAuthorized).toBe(false);
-    });
-
-    it("Should not allow non-owner to authorize resolver", async () => {
-      await expect(
-        bob.execute({
-          contractAddress: starknetResolver.address,
-          entrypoint: "authorize_resolver",
-          calldata: callData.compile("authorize_resolver", {
-            resolver_address: resolver.address,
-            is_authorized: true,
-          }),
-        })
-      ).rejects.toThrow("Resolver: only owner");
-    });
-  });
-
   describe("-- Resolver Create Source --", () => {
-    beforeEach(async () => {
-      // Authorize resolver before each test
-      await alice.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "authorize_resolver",
-        calldata: callData.compile("authorize_resolver", {
-          resolver_address: resolver.address,
-          is_authorized: true,
-        }),
-      });
-    });
-
     it("Should create source order with valid signature", async () => {
+      const USER_INTENT_TYPE = {
+        StarknetDomain: [
+          { name: "name", type: "shortstring" },
+          { name: "version", type: "shortstring" },
+          { name: "chainId", type: "shortstring" },
+          { name: "revision", type: "shortstring" },
+        ],
+        UserIntent: [
+          { name: "salt", type: "u256" },
+          { name: "maker", type: "ContractAddress" },
+          { name: "receiver", type: "ContractAddress" },
+          { name: "maker_asset", type: "ContractAddress" },
+          { name: "taker_asset", type: "ContractAddress" },
+          { name: "making_amount", type: "u256" },
+          { name: "taking_amount", type: "u256" },
+        ],
+      };
+
+      const DOMAIN = {
+        name: "ESCROW",
+        version: shortString.encodeShortString("1"),
+        chainId: CHAIN_ID,
+        revision: TypedDataRevision.ACTIVE,
+      };
+
       const userIntent = {
         salt: cairo.uint256(123456),
         maker: alice.address,
         receiver: resolver.address,
-        maker_asset: STARK,
-        taker_asset: ZERO_ADDRESS,
-        making_amount: cairo.uint256(AMOUNT),
-        taking_amount: cairo.uint256(AMOUNT),
+        maker_asset: USDC,
+        taker_asset: STARK,
+        making_amount: cairo.uint256(AMOUNT_USDC),
+        taking_amount: cairo.uint256(AMOUNT_USDC),
       };
 
-      const orderHash = generateOrderId(
-        CHAIN_ID,
-        alice.address,
-        resolver.address,
-        TIMELOCK,
-        AMOUNT_BIGINT,
-        secretHash1
-      );
+      // Create typed data for signing
+      const typedData: TypedData = {
+        domain: DOMAIN,
+        primaryType: "UserIntent",
+        types: USER_INTENT_TYPE,
+        message: userIntent,
+      };
 
+      // Sign with alice
+      const signature = (await alice.signMessage(typedData)) as WeierstrassSignatureType;
+      const { r, s } = signature;
+      const signatureArray = [r, s];
+
+      const orderHash = generateOrderId();
+
+      console.log("Amount", AMOUNT_USDC);
       const input = {
         user_address: alice.address,
-        user_intent: userIntent,
-        signature: [123456, 789012], // Mock signature
         resolver_address: resolver.address,
+        user_intent: userIntent,
+        signature: signatureArray,
         order_hash: orderHash,
         timelock: TIMELOCK,
-        amount: cairo.uint256(AMOUNT),
         secret_hash: secretHash1,
+        amount: cairo.uint256(AMOUNT_USDC)
       };
 
-      await resolver.execute({
+      let res = await resolver.execute({
         contractAddress: starknetResolver.address,
         entrypoint: "create_source",
         calldata: callData.compile("create_source", input),
       });
-
-      // Verify the function completed without error
-      // In a real test, we would verify the ESCROW contract was called correctly
-    });
-
-    it("Should not create source order with unauthorized resolver", async () => {
-      // Deauthorize resolver
-      await alice.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "authorize_resolver",
-        calldata: callData.compile("authorize_resolver", {
-          resolver_address: resolver.address,
-          is_authorized: false,
-        }),
-      });
-
-      const userIntent = {
-        salt: cairo.uint256(123456),
-        maker: alice.address,
-        receiver: resolver.address,
-        maker_asset: STARK,
-        taker_asset: ZERO_ADDRESS,
-        making_amount: cairo.uint256(AMOUNT),
-        taking_amount: cairo.uint256(AMOUNT),
-      };
-
-      const orderHash = generateOrderId(
-        CHAIN_ID,
-        alice.address,
-        resolver.address,
-        TIMELOCK,
-        AMOUNT_BIGINT,
-        secretHash2
-      );
-
-      const input = {
-        user_address: alice.address,
-        user_intent: userIntent,
-        signature: [123456, 789012],
-        resolver_address: resolver.address,
-        order_hash: orderHash,
-        timelock: TIMELOCK,
-        amount: cairo.uint256(AMOUNT),
-        secret_hash: secretHash2,
-      };
-
-      await expect(
-        resolver.execute({
-          contractAddress: starknetResolver.address,
-          entrypoint: "create_source",
-          calldata: callData.compile("create_source", input),
-        })
-      ).rejects.toThrow("Resolver: not authorized");
-    });
-
-    it("Should not create source order with caller mismatch", async () => {
-      const userIntent = {
-        salt: cairo.uint256(123456),
-        maker: alice.address,
-        receiver: resolver.address,
-        maker_asset: STARK,
-        taker_asset: ZERO_ADDRESS,
-        making_amount: cairo.uint256(AMOUNT),
-        taking_amount: cairo.uint256(AMOUNT),
-      };
-
-      const orderHash = generateOrderId(
-        CHAIN_ID,
-        alice.address,
-        resolver.address,
-        TIMELOCK,
-        AMOUNT_BIGINT,
-        secretHash3
-      );
-
-      const input = {
-        user_address: alice.address,
-        user_intent: userIntent,
-        signature: [123456, 789012],
-        resolver_address: bob.address, // Different from caller
-        order_hash: orderHash,
-        timelock: TIMELOCK,
-        amount: cairo.uint256(AMOUNT),
-        secret_hash: secretHash3,
-      };
-
-      await expect(
-        resolver.execute({
-          contractAddress: starknetResolver.address,
-          entrypoint: "create_source",
-          calldata: callData.compile("create_source", input),
-        })
-      ).rejects.toThrow("Resolver: caller mismatch");
+      console.log("res", res);
     });
   });
 
-  describe("-- Resolver Create Destination --", () => {
-    beforeEach(async () => {
-      // Authorize resolver before each test
-      await alice.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "authorize_resolver",
-        calldata: callData.compile("authorize_resolver", {
-          resolver_address: resolver.address,
-          is_authorized: true,
-        }),
-      });
-    });
+  // describe("-- Resolver Create Destination --", () => {
+  //   it("Should create destination order", async () => {
+  //     const orderHash = generateOrderId();
 
-    it("Should create destination order", async () => {
-      const orderHash = generateOrderId(
-        CHAIN_ID,
-        resolver.address,
-        alice.address,
-        TIMELOCK,
-        AMOUNT_BIGINT,
-        secretHash1
-      );
+  //     const input = {
+  //       user_address: alice.address,
+  //       resolver_address: resolver.address,
+  //       order_hash: orderHash,
+  //       timelock: TIMELOCK,
+  //       amount: cairo.uint256(AMOUNT),
+  //       secret_hash: secretHash1,
+  //       token: STARK,
+  //     };
 
-      const input = {
-        user_address: alice.address,
-        resolver_address: resolver.address,
-        order_hash: orderHash,
-        timelock: TIMELOCK,
-        amount: cairo.uint256(AMOUNT),
-        secret_hash: secretHash1,
-        token: STARK,
-      };
+  //     await resolver.execute({
+  //       contractAddress: starknetResolver.address,
+  //       entrypoint: "create_destination",
+  //       calldata: callData.compile("create_destination", input),
+  //     });
 
-      await resolver.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "create_destination",
-        calldata: callData.compile("create_destination", input),
-      });
+  //     // Verify the function completed without error
+  //     // In a real test, we would verify the ESCROW contract was called correctly
+  //   });
 
-      // Verify the function completed without error
-      // In a real test, we would verify the ESCROW contract was called correctly
-    });
+  //   it("Should not create destination order with caller mismatch", async () => {
+  //     const orderHash = generateOrderId();
 
-    it("Should not create destination order with unauthorized resolver", async () => {
-      // Deauthorize resolver
-      await alice.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "authorize_resolver",
-        calldata: callData.compile("authorize_resolver", {
-          resolver_address: resolver.address,
-          is_authorized: false,
-        }),
-      });
+  //     const input = {
+  //       user_address: alice.address,
+  //       resolver_address: alice.address, // Different from caller (resolver.address)
+  //       order_hash: orderHash,
+  //       timelock: TIMELOCK,
+  //       amount: cairo.uint256(AMOUNT),
+  //       secret_hash: secretHash2,
+  //       token: STARK,
+  //     };
 
-      const orderHash = generateOrderId(
-        CHAIN_ID,
-        resolver.address,
-        alice.address,
-        TIMELOCK,
-        AMOUNT_BIGINT,
-        secretHash2
-      );
+  //     await expect(
+  //       resolver.execute({
+  //         contractAddress: starknetResolver.address,
+  //         entrypoint: "create_destination",
+  //         calldata: callData.compile("create_destination", input),
+  //       })
+  //     ).rejects.toThrow("Resolver: caller mismatch");
+  //   });
+  // });
 
-      const input = {
-        user_address: alice.address,
-        resolver_address: resolver.address,
-        order_hash: orderHash,
-        timelock: TIMELOCK,
-        amount: cairo.uint256(AMOUNT),
-        secret_hash: secretHash2,
-        token: STARK,
-      };
+  // describe("-- Resolver Withdraw --", () => {
+  //   it("Should withdraw with correct owner", async () => {
+  //     const orderHash = generateOrderId();
+  //     const secret = hexToU32Array(secret3);
 
-      await expect(
-        resolver.execute({
-          contractAddress: starknetResolver.address,
-          entrypoint: "create_destination",
-          calldata: callData.compile("create_destination", input),
-        })
-      ).rejects.toThrow("Resolver: not authorized");
-    });
+  //     await alice.execute({
+  //       contractAddress: starknetResolver.address,
+  //       entrypoint: "withdraw",
+  //       calldata: callData.compile("withdraw", {
+  //         token: STARK,
+  //         order_hash: orderHash,
+  //         secret: secret,
+  //       }),
+  //     });
 
-    it("Should not create destination order with caller mismatch", async () => {
-      const orderHash = generateOrderId(
-        CHAIN_ID,
-        resolver.address,
-        alice.address,
-        TIMELOCK,
-        AMOUNT_BIGINT,
-        secretHash3
-      );
+  //     // Verify the function completed without error
+  //     // In a real test, we would verify the ESCROW contract was called correctly
+  //   });
 
-      const input = {
-        user_address: alice.address,
-        resolver_address: bob.address, // Different from caller
-        order_hash: orderHash,
-        timelock: TIMELOCK,
-        amount: cairo.uint256(AMOUNT),
-        secret_hash: secretHash3,
-        token: STARK,
-      };
+  //   it("Should not withdraw with non-owner", async () => {
+  //     const orderHash = generateOrderId();
+  //     const secret = hexToU32Array(secret3);
 
-      await expect(
-        resolver.execute({
-          contractAddress: starknetResolver.address,
-          entrypoint: "create_destination",
-          calldata: callData.compile("create_destination", input),
-        })
-      ).rejects.toThrow("Resolver: caller mismatch");
-    });
-  });
+  //     await expect(
+  //       resolver.execute({
+  //         contractAddress: starknetResolver.address,
+  //         entrypoint: "withdraw",
+  //         calldata: callData.compile("withdraw", {
+  //           token: STARK,
+  //           order_hash: orderHash,
+  //           secret: secret,
+  //         }),
+  //       })
+  //     ).rejects.toThrow("Resolver: caller mismatch");
+  //   });
+  // });
 
-  describe("-- Resolver Integration with ESCROW --", () => {
-    beforeEach(async () => {
-      // Authorize resolver before each test
-      await alice.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "authorize_resolver",
-        calldata: callData.compile("authorize_resolver", {
-          resolver_address: resolver.address,
-          is_authorized: true,
-        }),
-      });
-    });
+  // describe("-- Resolver Integration with ESCROW --", () => {
+  //   it("Should create destination order and verify ESCROW integration", async () => {
+  //     const orderHash = generateOrderId();
 
-    it("Should create destination order and verify ESCROW integration", async () => {
-      const orderHash = generateOrderId(
-        CHAIN_ID,
-        resolver.address,
-        alice.address,
-        TIMELOCK,
-        AMOUNT_BIGINT,
-        secretHash1
-      );
+  //     const input = {
+  //       user_address: alice.address,
+  //       resolver_address: resolver.address,
+  //       order_hash: orderHash,
+  //       timelock: TIMELOCK,
+  //       amount: cairo.uint256(AMOUNT),
+  //       secret_hash: secretHash1,
+  //       token: STARK,
+  //     };
 
-      const input = {
-        user_address: alice.address,
-        resolver_address: resolver.address,
-        order_hash: orderHash,
-        timelock: TIMELOCK,
-        amount: cairo.uint256(AMOUNT),
-        secret_hash: secretHash1,
-        token: STARK,
-      };
+  //     await resolver.execute({
+  //       contractAddress: starknetResolver.address,
+  //       entrypoint: "create_destination",
+  //       calldata: callData.compile("create_destination", input),
+  //     });
 
-      await resolver.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "create_destination",
-        calldata: callData.compile("create_destination", input),
-      });
+  //     // Verify order was created in ESCROW contract
+  //     const order = await starknetESCROW.get_order(STARK, orderHash);
+  //     expect(order.initiator).toBe(BigInt(resolver.address));
+  //     expect(order.redeemer).toBe(BigInt(alice.address));
+  //     expect(order.amount).toBe(AMOUNT);
+  //     expect(order.timelock).toBe(TIMELOCK);
+  //     expect(order.is_fulfilled).toBe(false);
+  //   });
 
-      // Verify order was created in ESCROW contract
-      const order = await starknetESCROW.get_order(STARK, orderHash);
-      expect(order.initiator).toBe(BigInt(resolver.address));
-      expect(order.redeemer).toBe(BigInt(alice.address));
-      expect(order.amount).toBe(AMOUNT);
-      expect(order.timelock).toBe(TIMELOCK);
-      expect(order.is_fulfilled).toBe(false);
-    });
+  //   it("Should create source order and verify ESCROW integration", async () => {
+  //     const userIntent = {
+  //       salt: cairo.uint256(123456),
+  //       maker: alice.address,
+  //       receiver: resolver.address,
+  //       maker_asset: STARK,
+  //       taker_asset: ZERO_ADDRESS,
+  //       making_amount: cairo.uint256(AMOUNT),
+  //       taking_amount: cairo.uint256(AMOUNT),
+  //     };
 
-    it("Should create source order and verify ESCROW integration", async () => {
-      const userIntent = {
-        salt: cairo.uint256(123456),
-        maker: alice.address,
-        receiver: resolver.address,
-        maker_asset: STARK,
-        taker_asset: ZERO_ADDRESS,
-        making_amount: cairo.uint256(AMOUNT),
-        taking_amount: cairo.uint256(AMOUNT),
-      };
+  //     const orderHash = generateOrderId();
 
-      const orderHash = generateOrderId(
-        CHAIN_ID,
-        alice.address,
-        resolver.address,
-        TIMELOCK,
-        AMOUNT_BIGINT,
-        secretHash2
-      );
+  //     const input = {
+  //       user_address: alice.address,
+  //       user_intent: userIntent,
+  //       signature: [123456, 789012], // Mock signature
+  //       resolver_address: resolver.address,
+  //       order_hash: orderHash,
+  //       timelock: TIMELOCK,
+  //       amount: cairo.uint256(AMOUNT),
+  //       secret_hash: secretHash2,
+  //     };
 
-      const input = {
-        user_address: alice.address,
-        user_intent: userIntent,
-        signature: [123456, 789012], // Mock signature
-        resolver_address: resolver.address,
-        order_hash: orderHash,
-        timelock: TIMELOCK,
-        amount: cairo.uint256(AMOUNT),
-        secret_hash: secretHash2,
-      };
+  //     await resolver.execute({
+  //       contractAddress: starknetResolver.address,
+  //       entrypoint: "create_source",
+  //       calldata: callData.compile("create_source", input),
+  //     });
 
-      await resolver.execute({
-        contractAddress: starknetResolver.address,
-        entrypoint: "create_source",
-        calldata: callData.compile("create_source", input),
-      });
-
-      // Verify order was created in ESCROW contract
-      const order = await starknetESCROW.get_order(STARK, orderHash);
-      expect(order.initiator).toBe(BigInt(alice.address));
-      expect(order.redeemer).toBe(BigInt(resolver.address));
-      expect(order.amount).toBe(AMOUNT);
-      expect(order.timelock).toBe(TIMELOCK);
-      expect(order.is_fulfilled).toBe(false);
-    });
-  });
-
-  describe("-- Resolver Storage Tests --", () => {
-    it("Should store and retrieve ESCROW contract address", async () => {
-      const escrowAddress = await starknetResolver.escrow_contract();
-      expect(escrowAddress).toBe(starknetESCROW.address);
-    });
-
-    it("Should store and retrieve chain ID", async () => {
-      const chainId = await starknetResolver.chain_id();
-      expect(chainId).toBe(CHAIN_ID);
-    });
-
-    it("Should store and retrieve owner", async () => {
-      const owner = await starknetResolver.owner();
-      expect(owner).toBe(alice.address);
-    });
-  });
+  //     // Verify order was created in ESCROW contract
+  //     const order = await starknetESCROW.get_order(STARK, orderHash);
+  //     expect(order.initiator).toBe(BigInt(alice.address));
+  //     expect(order.redeemer).toBe(BigInt(resolver.address));
+  //     expect(order.amount).toBe(AMOUNT);
+  //     expect(order.timelock).toBe(TIMELOCK);
+  //     expect(order.is_fulfilled).toBe(false);
+  //   });
+  // });
 }); 

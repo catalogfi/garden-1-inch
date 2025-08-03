@@ -55,17 +55,19 @@ pub trait IESCROW<TContractState> {
 
 #[starknet::interface]
 pub trait IResolver<TContractState> {
-    // Core resolver functions
+
+    fn owner(self: @TContractState) -> ContractAddress;
+
     fn create_source(
         ref self: TContractState,
         user_address: ContractAddress,
+        resolver_address: ContractAddress,
         user_intent: crate::interface::struct_hash::UserIntent,
         signature: Array<felt252>,
-        resolver_address: ContractAddress,
         order_hash: felt252,
         timelock: u128,
-        amount: u256,
         secret_hash: [u32; 8],
+        amount: u256
     );
 
     fn create_destination(
@@ -74,9 +76,16 @@ pub trait IResolver<TContractState> {
         resolver_address: ContractAddress,
         order_hash: felt252,
         timelock: u128,
-        amount: u256,
-        secret_hash: [u32; 8],
         token: ContractAddress,
+        secret_hash: [u32; 8],
+        amount: u256
+    );
+
+    fn withdraw(
+        ref self: TContractState,
+        token: ContractAddress,
+        order_hash: felt252,
+        secret: Array<u32>,
     );
 }
 

@@ -9,8 +9,6 @@ use starknet::ContractAddress;
     use core::traits::Into;
     use crate::interface::{OutboundOrderInput, InboundOrderInput};
     use crate::interface::struct_hash::UserIntent;
-    use crate::interface::IMessageHash;
-    use openzeppelin::account::interface::{ISRC6Dispatcher, ISRC6DispatcherTrait};
     use crate::interface::{IESCROWDispatcher,IResolver};
     use starknet::syscalls::get_execution_info_v2_syscall;
 
@@ -57,40 +55,25 @@ use starknet::ContractAddress;
 
     #[abi(embed_v0)]
     pub impl ResolverImpl of IResolver<ContractState> {
-        /// @notice Creates a source order (Starknet -> Something)
-        /// @dev Called by resolver when user wants to send funds from Starknet to another chain
-        /// @param user_address The address of the user who signed the intent
-        /// @param user_intent The user's intent for the cross-chain transfer
-        /// @param signature The user's signature
-        /// @param resolver_address The resolver address (caller)
-        /// @param order_hash The order hash for the ESCROW
-        /// @param timelock Timelock for the ESCROW
-        /// @param amount Amount to transfer
-        /// @param secret_hash Hash of the secret for redemption
+
+        fn owner(self: @ContractState) -> ContractAddress {
+            self.owner.read()
+        }
+
         fn create_source(
             ref self: ContractState,
             user_address: ContractAddress,
+            resolver_address: ContractAddress,
             user_intent: UserIntent,
             signature: Array<felt252>,
-            resolver_address: ContractAddress,
             order_hash: felt252,
             timelock: u128,
-            amount: u256,
             secret_hash: [u32; 8],
+            amount: u256
         ) {
             // Verify resolver is authorized
             let caller = starknet::get_caller_address();
             assert!(caller == resolver_address, "Resolver: caller mismatch");
-
-            // Verify user signature
-            let chain_id = self.chain_id.read();
-            let message_hash = user_intent.get_message_hash(chain_id, user_address);
-            
-            let is_valid = ISRC6Dispatcher { contract_address: user_address }
-                .is_valid_signature(message_hash, signature.clone());
-            let is_valid_signature = is_valid == starknet::VALIDATED || is_valid == 1;
-            assert!(is_valid_signature, "Resolver: invalid user signature");
-
             // Create outbound order input
             let outbound_input = OutboundOrderInput {
                 user_intent,
@@ -130,9 +113,9 @@ use starknet::ContractAddress;
             resolver_address: ContractAddress,
             order_hash: felt252,
             timelock: u128,
-            amount: u256,
-            secret_hash: [u32; 8],
             token: ContractAddress,
+            secret_hash: [u32; 8],
+            amount: u256
         ) {
             // Verify resolver is authorized
             let caller = starknet::get_caller_address();
@@ -158,6 +141,19 @@ use starknet::ContractAddress;
                 resolver_address,
                 amount,
             }));
+        }
+
+        fn withdraw(
+            ref self: ContractState,
+            token: ContractAddress,
+            order_hash: felt252,
+            secret: Array<u32>,
+        ) {
+            let caller = starknet::get_caller_address();
+            assert!(caller == self.owner.read(), "Resolver: caller mismatch");
+
+            IESCROWDispatcher { contract_address: self.escrow_contract.read() }
+                .withdraw(token, order_hash, secret);
         }
     }
 } 

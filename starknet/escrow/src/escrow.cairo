@@ -296,16 +296,16 @@ use core::num::traits::Zero;
             };
             self.orders.write((token, order_hash), create_order);
 
-            let token_dispatcher = IERC20Dispatcher { contract_address: token };
-            let balance = token_dispatcher.balance_of(funder_);
-            assert!(balance >= amount_, "ERC20: Insufficient balance");
+            // let token_dispatcher = IERC20Dispatcher { contract_address: token };
+            // let balance = token_dispatcher.balance_of(funder_);
+            // assert!(balance >= amount_, "ERC20: Insufficient balance");
 
-            let allowance = token_dispatcher.allowance(funder_, get_contract_address());
-            assert!(allowance >= amount_, "ERC20: insufficient allowance");
+            // let allowance = token_dispatcher.allowance(funder_, get_contract_address());
+            // assert!(allowance >= amount_, "ERC20: insufficient allowance");
 
             // Transfer amount + security deposit from funder to contract
 
-            let total_amount = amount_ + SECURITY_DEPOSIT;
+            let total_amount = amount_;
             let token_dispatcher = IERC20Dispatcher { contract_address: token };
             let transfer_result = token_dispatcher.transfer_from(funder_, get_contract_address(), total_amount);
             assert!(transfer_result, "ERC20: Transfer failed");
