@@ -122,8 +122,8 @@ impl Server {
     pub async fn new(port: u16, db_url: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let orderbook = OrderbookProvider::from_db_url(db_url).await?;
 
-        // orderbook.drop_tables().await?;
-        // orderbook.create_tables_with_new_schema().await?;
+        orderbook.drop_tables().await?;
+        orderbook.create_tables_with_new_schema().await?;
 
         let state = HandlerState { orderbook };
 

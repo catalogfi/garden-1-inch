@@ -163,9 +163,9 @@ pub struct SignedOrderInput {
     /// Cross chain order data
     pub order: OrderInput,
     /// Source chain id
-    pub src_chain_id: u64,
+    pub src_chain_id: String,
     /// Destination chain id
-    pub dst_chain_id: u64,
+    pub dst_chain_id: String,
     /// Signature of the cross chain order typed data (using signTypedData v4)
     pub signature: serde_json::Value,
     /// An interaction call data. ABI encoded a set of makerAssetSuffix, takerAssetSuffix, makingAmountGetter, takingAmountGetter, predicate, permit, preInteraction, postInteraction
@@ -200,8 +200,8 @@ pub struct CrossChainOrder {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub order_hash: String,
-    pub src_chain_id: i64,
-    pub dst_chain_id: i64,
+    pub src_chain_id: String,
+    pub dst_chain_id: String,
     pub maker: String,
     pub receiver: String,
     pub taker: String,
@@ -258,8 +258,8 @@ pub struct ActiveOrderOutput {
     pub auction_end_date: Option<String>,
     pub remaining_maker_amount: String,
     pub extension: serde_json::Value,
-    pub src_chain_id: u64,
-    pub dst_chain_id: u64,
+    pub src_chain_id: String,
+    pub dst_chain_id: String,
     pub order: OrderInput,
     pub taker: String,
     pub timelock: String,

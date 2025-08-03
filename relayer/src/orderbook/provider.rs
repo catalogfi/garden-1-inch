@@ -66,8 +66,8 @@ impl OrderbookProvider {
             CREATE TABLE orders (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 order_hash VARCHAR(66) UNIQUE NOT NULL,
-                src_chain_id BIGINT NOT NULL,
-                dst_chain_id BIGINT NOT NULL,
+                src_chain_id VARCHAR(255) NOT NULL,
+                dst_chain_id VARCHAR(255) NOT NULL,
                 maker VARCHAR(42) NOT NULL,
                 receiver VARCHAR(42) NOT NULL,
                 taker VARCHAR(42) NOT NULL,
@@ -155,8 +155,8 @@ impl OrderbookProvider {
 
         let result = sqlx::query(insert_sql)
             .bind(&signed_order.order_hash)
-            .bind(signed_order.src_chain_id as i64)
-            .bind(signed_order.dst_chain_id as i64)
+            .bind(&signed_order.src_chain_id)
+            .bind(&signed_order.dst_chain_id)
             .bind(&signed_order.order.maker)
             .bind(&signed_order.order.receiver)
             .bind(&signed_order.taker)
@@ -223,7 +223,7 @@ impl OrderbookProvider {
     /// Get orders by source chain ID
     pub async fn get_orders_by_chain(
         &self,
-        src_chain_id: u64,
+        src_chain_id: &str,
     ) -> Result<Vec<CrossChainOrder>, OrderbookError> {
         let query_sql = r#"
             SELECT
@@ -239,7 +239,7 @@ impl OrderbookProvider {
         "#;
 
         let orders = sqlx::query_as::<_, CrossChainOrder>(query_sql)
-            .bind(src_chain_id as i64)
+            .bind(src_chain_id)
             .fetch_all(&self.pool)
             .await?;
 

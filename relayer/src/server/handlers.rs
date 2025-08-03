@@ -89,8 +89,8 @@ pub async fn get_active_orders(
                         auction_end_date: order.auction_end_date.clone(),
                         remaining_maker_amount: order.making_amount.to_string(),
                         extension: order.extension,
-                        src_chain_id: order.src_chain_id as u64,
-                        dst_chain_id: order.dst_chain_id as u64,
+                        src_chain_id: order.src_chain_id.clone(),
+                        dst_chain_id: order.dst_chain_id.clone(),
                         order: order_input,
                         taker: order.taker.clone(),
                         timelock: order.timelock.clone(),
@@ -201,9 +201,9 @@ pub async fn get_order(
 
 pub async fn get_orders_by_chain(
     State(state): State<HandlerState>,
-    Path(chain_id): Path<u64>,
+    Path(chain_id): Path<String>,
 ) -> Result<Response<Vec<CrossChainOrder>>, Response<()>> {
-    match state.orderbook.get_orders_by_chain(chain_id).await {
+    match state.orderbook.get_orders_by_chain(&chain_id).await {
         Ok(orders) => Ok(Response::ok(orders)),
         Err(e) => {
             tracing::error!("Failed to retrieve orders for chain {}: {}", chain_id, e);
