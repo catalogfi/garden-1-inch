@@ -141,7 +141,6 @@ impl OrderbookProvider {
         sqlx::query(create_table_sql).execute(&self.pool).await?;
         Ok(())
     }
-
     pub async fn handle_escrow_event(
         &self,
         order_hash: &str,

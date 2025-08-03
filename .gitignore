@@ -135,5 +135,24 @@ dist
 !.yarn/versions
 
 # Vite logs files
-vite.config.js.timestamp-*
+vite.config.ts.timestamp-i*
 vite.config.ts.timestamp-*
+
+#resolver-service
+resolver-service/target
+resolver-service/Settings.toml
+
+
+# Rust build artifacts and unwanted files
+/target/
+**/*.rs.bk
+*.pdb
+relayer/target/
+
+
+watcher/target/
+watcher/Settings.toml
+resolver-service/Settings.toml  
+resolver-service/target/
+bitcoin/target/
+bitcoin/Settings.toml

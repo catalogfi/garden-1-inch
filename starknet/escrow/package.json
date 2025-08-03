@@ -1,0 +1,45 @@
+{
+  "name": "escrow",
+  "version": "1.0.0",
+  "description": "Escrow and Resolver contracts for cross-chain escrow",
+  "main": "index.js",
+  "scripts": {
+    "build": "scarb build",
+    "test": "jest",
+    "test:escrow": "jest tests/test_escrow.ts",
+    "test:resolver": "jest tests/test_resolver.ts",
+    "test:simplified": "jest tests/simplified_cross_chain.ts",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "deploy:devnet": "ts-node scripts/deploy.ts devnet",
+    "deploy:testnet": "ts-node scripts/deploy.ts testnet",
+    "deploy:mainnet": "ts-node scripts/deploy.ts mainnet",
+    "verify:devnet": "ts-node scripts/verify.ts devnet",
+    "verify:testnet": "ts-node scripts/verify.ts testnet",
+    "verify:mainnet": "ts-node scripts/verify.ts mainnet",
+    "test:order-flow": "ts-node scripts/test_order_flow.ts",
+    "compile": "scarb build",
+    "clean": "scarb clean && rm -rf deployments verifications"
+  },
+  "dependencies": {
+    "starknet": "7.6.4",
+    "ethers": "^6.8.1",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8",
+    "typescript": "^5.2.2",
+    "ts-jest": "^29.1.1",
+    "ts-node": "^10.9.1",
+    "@types/node": "^20.8.10",
+    "@types/axios": "^0.14.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.ts"],
+    "setupFilesAfterEnv": ["<rootDir>/tests/jest.setup.js"],
+    "testTimeout": 120000
+  }
+} 

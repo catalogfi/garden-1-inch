@@ -4,6 +4,7 @@ polling_interval = 5000
 
 [[chains.evm]]
 name = "base"
+<<<<<<< HEAD
 chain_id = 84532
 rpc_url = "https://base-sepolia-rpc.publicnode.com"
 contract_address = "0x048975f98b998796d1cF54DE3A3Fc2bE01d891Fd"
@@ -25,6 +26,12 @@ rpc_url = "https://node.ghostnet.etherlink.com"
 contract_address = "0x30d24e9d1Fbffad6883E8632c5ad4216c9A86dFC"
 start_block = 20892796
 
+=======
+chain_id = 8453
+rpc_url = "https://base-sepolia.drpc.org"
+contract_address = "0xe80CF7Ae2E3Cb8851C8F289bA4d622Cf7B6be5a8"
+start_block = 29182503
+>>>>>>> main
 
 [[chains.starknet]]
 name = ""
@@ -32,6 +39,7 @@ chain_id = 0
 rpc_url = ""
 contract_address = ""
 start_block = 0
+<<<<<<< HEAD
 
 
 # [[chains.starknet]]
@@ -47,3 +55,5 @@ start_block = 0
 # rpc_url = 'https://starknet-sepolia.public.blastapi.io'
 # contract_address = "0x3fd371215a58e14640fe29b213ebe691731bbc3b921665bee255bee79d9c423"
 # start_block = 0
+=======
+>>>>>>> main
