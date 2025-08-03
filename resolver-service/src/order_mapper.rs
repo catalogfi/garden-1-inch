@@ -342,14 +342,11 @@ impl OrderMapper {
     }
 
     fn determine_action(&self, order: &OrderDetail) -> (ActionType, ActionType) {
-        if order.order_hash == "0xba7a5c5fcdabac51123d738aa7c25ad5d977ad7860b97fe9aa055f538791f657" {
-            return (ActionType::NoOp, ActionType::WidthdrawDestEscrow);
-        }
         tracing::info!("Determining action for order: {:?}", order.order_hash);
         match order.status {
             OrderStatus::Unmatched => (ActionType::DeploySrcEscrow, ActionType::NoOp),
             OrderStatus::SourceFilled => (ActionType::NoOp, ActionType::DeployDestEscrow),
-            OrderStatus::DestinationFilled => (ActionType::WidthdrawSrcEscrow, ActionType::NoOp),
+            OrderStatus::DestinationFilled => (ActionType::WidthdrawSrcEscrow, ActionType::WidthdrawDestEscrow),
             OrderStatus::SourceWithdrawPending => (ActionType::WidthdrawSrcEscrow, ActionType::NoOp),
             OrderStatus::DestinationWithdrawPending => (ActionType::NoOp, ActionType::WidthdrawDestEscrow),
             OrderStatus::SourceSettled => (ActionType::NoOp, ActionType::WidthdrawDestEscrow),
