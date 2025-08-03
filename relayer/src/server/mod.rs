@@ -10,7 +10,7 @@ use axum::{
 };
 use handlers::{
     get_active_orders, get_health, get_order, get_orders_by_chain, get_secret, submit_order,
-    submit_secret,
+    submit_secret, update_order_field,
 };
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
@@ -122,8 +122,8 @@ impl Server {
     pub async fn new(port: u16, db_url: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let orderbook = OrderbookProvider::from_db_url(db_url).await?;
 
-        orderbook.drop_tables().await?;
-        orderbook.create_tables_with_new_schema().await?;
+        // orderbook.drop_tables().await?;
+        // orderbook.create_tables_with_new_schema().await?;
 
         let state = HandlerState { orderbook };
 
@@ -148,6 +148,7 @@ impl Server {
             .route("/{order_id}", get(get_order))
             .route("/chain/{chain_id}", get(get_orders_by_chain))
             .route("/secret/{order_hash}", get(get_secret))
+            .route("/update/{order_hash}", post(update_order_field))
             .with_state(self.state.clone());
 
         // Create main router with sub-routes

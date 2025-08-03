@@ -184,6 +184,14 @@ pub struct SignedOrderInput {
     pub taker_traits: String,
     /// Args
     pub args: serde_json::Value,
+    /// Source chain deploy immutables data
+    pub src_deploy_immutables: Option<serde_json::Value>,
+    /// Destination chain deploy immutables data
+    pub dst_deploy_immutables: Option<serde_json::Value>,
+    /// Source chain withdraw immutables data
+    pub src_withdraw_immutables: Option<serde_json::Value>,
+    /// Destination chain withdraw immutables data
+    pub dst_withdraw_immutables: Option<serde_json::Value>,
 }
 
 /// Database model for cross chain orders
@@ -220,6 +228,14 @@ pub struct CrossChainOrder {
     pub dst_tx_hash: Option<String>,
     pub filled_maker_amount: BigDecimal,
     pub filled_taker_amount: BigDecimal,
+    pub src_deploy_immutables: Option<serde_json::Value>,
+    pub dst_deploy_immutables: Option<serde_json::Value>,
+    pub src_withdraw_immutables: Option<serde_json::Value>,
+    pub dst_withdraw_immutables: Option<serde_json::Value>,
+    pub src_event: Option<serde_json::Value>,
+    pub dest_event: Option<serde_json::Value>,
+    pub src_withdraw: Option<serde_json::Value>,
+    pub dst_withdraw: Option<serde_json::Value>,
 }
 
 /// Secret input for order fill
@@ -228,14 +244,14 @@ pub struct SecretInput {
     /// A secret for the fill hashlock
     pub secret: String,
     /// Order hash
-    pub order_hash: String,
+    pub order_hash: String
 }
 
 
 /// Active order output for API responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActiveOrderOutput {
-    pub order_hash: String,
+    pub order_hash: String, 
     pub signature: serde_json::Value,
     pub deadline: u64,
     pub auction_start_date: Option<String>,
@@ -251,6 +267,14 @@ pub struct ActiveOrderOutput {
     pub args: serde_json::Value,
     pub order_type: OrderType,
     pub secrets: Vec<SecretEntry>,
+    pub src_deploy_immutables: Option<serde_json::Value>,
+    pub dst_deploy_immutables: Option<serde_json::Value>,
+    pub src_withdraw_immutables: Option<serde_json::Value>,
+    pub dst_withdraw_immutables: Option<serde_json::Value>,
+    pub src_event: Option<serde_json::Value>,
+    pub dest_event: Option<serde_json::Value>,
+    pub src_withdraw: Option<serde_json::Value>,
+    pub dst_withdraw: Option<serde_json::Value>,
 }
 
 /// Meta information for paginated responses
@@ -269,9 +293,20 @@ pub struct GetActiveOrdersOutput {
     pub items: Vec<ActiveOrderOutput>,
 }
 
-/// Secret response for getting order secret
+/// Secret response for API responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretResponse {
     pub secret: Option<String>,
     pub order_hash: String,
+}
+
+/// Request to update a specific field for an order
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateOrderFieldRequest {
+    /// Order hash
+    pub order_hash: String,
+    /// Field name to update (must be one of the valid JSONB fields)
+    pub field_name: String,
+    /// JSON value to set for the field
+    pub value: serde_json::Value,
 }

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use crate::{order_mapper::{OrderAction}, settings::{ChainSettings, ChainType}};
 
 mod evm;
@@ -19,4 +20,17 @@ pub async fn create_resolver(chain_settings: &ChainSettings) -> Box<dyn Resolver
         ChainType::EVM => Box::new(evm::EvmResolver::new(&chain_settings)),
         _ => panic!("Unsupported chain: {:?}", chain_settings.chain_type),
     }
+}
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CustomImmutables {
+    pub amount: String,
+    pub hashlock: String,
+    pub maker: String,
+    #[serde(rename = "orderHash")]
+    pub order_hash: String,
+    #[serde(rename = "safetyDeposit")]
+    pub safety_deposit: String,
+    pub taker: String,
+    pub timelocks: String,
+    pub token: String,
 }

@@ -1,4 +1,4 @@
-orders_url = "http://10.67.21.221:4455"
+orders_url = "http://0.0.0.0:4455"
 poll_interval = 5
 
 [chains.monad_testnet]

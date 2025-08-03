@@ -1,6 +1,4 @@
-use crate::primitives::{CrossChainOrder, OrderStatus, SignedOrderInput};
-use rand::Rng;
-use sha2::{Digest, Sha256};
+use crate::primitives::{CrossChainOrder, SecretEntry, SignedOrderInput};
 use sqlx::{Pool, Postgres, Row};
 use std::fmt;
 
@@ -86,13 +84,13 @@ impl OrderbookProvider {
                 extension JSONB NOT NULL,
                 order_type TEXT NOT NULL DEFAULT 'single_fill',
                 secrets JSONB NOT NULL DEFAULT '[]'::jsonb,
-                
+
                 -- Status and lifecycle fields
                 status TEXT NOT NULL DEFAULT 'unmatched',
                 deadline BIGINT NOT NULL,
                 auction_start_date BIGINT,
                 auction_end_date BIGINT,
-                
+
                 -- Fill tracking
                 src_escrow_address VARCHAR(42),
                 dst_escrow_address VARCHAR(42),
@@ -100,7 +98,15 @@ impl OrderbookProvider {
                 dst_tx_hash VARCHAR(66),
                 filled_maker_amount NUMERIC DEFAULT 0,
                 filled_taker_amount NUMERIC DEFAULT 0,
-                
+                src_deploy_immutables JSONB,
+                dst_deploy_immutables JSONB,
+                src_withdraw_immutables JSONB,
+                dst_withdraw_immutables JSONB,
+                src_event JSONB,
+                dest_event JSONB,
+                src_withdraw JSONB,
+                dst_withdraw JSONB,
+
                 -- Timestamps
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -127,13 +133,6 @@ impl OrderbookProvider {
         Ok(())
     }
 
-    /// Generate a unique order hash as 32-byte hex string
-    fn generate_order_hash(&self, _signed_order: &SignedOrderInput) -> String {
-        let mut bytes = [0u8; 32];
-        rand::thread_rng().fill(&mut bytes);
-        hex::encode(bytes)
-    }
-
     /// Insert a new cross chain order into the database
     pub async fn create_order(
         &self,
@@ -148,8 +147,8 @@ impl OrderbookProvider {
             INSERT INTO orders (
                 order_hash, src_chain_id, dst_chain_id, maker, receiver, taker, timelock,
                 maker_asset, taker_asset, making_amount, taking_amount,
-                salt, maker_traits, taker_traits, args, signature, extension, order_type, secrets, status, deadline
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+                salt, maker_traits, taker_traits, args, signature, extension, order_type, secrets, status, deadline, src_deploy_immutables, dst_deploy_immutables, src_withdraw_immutables, dst_withdraw_immutables, src_event, dest_event, src_withdraw, dst_withdraw
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
             ON CONFLICT (order_hash) DO NOTHING
             RETURNING id
         "#;
@@ -176,6 +175,14 @@ impl OrderbookProvider {
             .bind(&secrets_json)
             .bind("unmatched")
             .bind(signed_order.deadline as i64)
+            .bind(&signed_order.src_deploy_immutables)
+            .bind(&signed_order.dst_deploy_immutables)
+            .bind(&signed_order.src_withdraw_immutables)
+            .bind(&signed_order.dst_withdraw_immutables)
+            .bind(&None::<serde_json::Value>) // src_event
+            .bind(&None::<serde_json::Value>) // dest_event
+            .bind(&None::<serde_json::Value>) // src_withdraw
+            .bind(&None::<serde_json::Value>) // dst_withdraw
             .fetch_optional(&self.pool)
             .await?;
 
@@ -193,14 +200,14 @@ impl OrderbookProvider {
         order_id: &str,
     ) -> Result<Option<CrossChainOrder>, OrderbookError> {
         let query_sql = r#"
-            SELECT 
+            SELECT
                 id, order_hash, src_chain_id, dst_chain_id, maker, receiver, taker, timelock,
                 maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits, taker_traits, args,
-                signature, extension, order_type, secrets, status, deadline, 
+                signature, extension, order_type, secrets, status, deadline,
                 auction_start_date,
                 auction_end_date,
                 src_escrow_address, dst_escrow_address, src_tx_hash,
-                dst_tx_hash, filled_maker_amount, filled_taker_amount,
+                dst_tx_hash, filled_maker_amount, filled_taker_amount, src_deploy_immutables, dst_deploy_immutables, src_withdraw_immutables, dst_withdraw_immutables, src_event, dest_event, src_withdraw, dst_withdraw,
                 created_at, updated_at
             FROM orders WHERE order_hash = $1
         "#;
@@ -219,14 +226,14 @@ impl OrderbookProvider {
         src_chain_id: u64,
     ) -> Result<Vec<CrossChainOrder>, OrderbookError> {
         let query_sql = r#"
-            SELECT 
+            SELECT
                 id, order_hash, src_chain_id, dst_chain_id, maker, receiver, taker, timelock,
                 maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits, taker_traits, args,
-                signature, extension, order_type, secrets, status, deadline, 
+                signature, extension, order_type, secrets, status, deadline,
                 auction_start_date,
                 auction_end_date,
                 src_escrow_address, dst_escrow_address, src_tx_hash,
-                dst_tx_hash, filled_maker_amount, filled_taker_amount,
+                dst_tx_hash, filled_maker_amount, filled_taker_amount, src_deploy_immutables, dst_deploy_immutables, src_withdraw_immutables, dst_withdraw_immutables, src_event, dest_event, src_withdraw, dst_withdraw,
                 created_at, updated_at
             FROM orders WHERE src_chain_id = $1 ORDER BY created_at DESC
         "#;
@@ -248,14 +255,14 @@ impl OrderbookProvider {
         // Get orders with pagination
         let orders = sqlx::query_as::<_, CrossChainOrder>(
             r#"
-            SELECT 
+            SELECT
                 id, order_hash, src_chain_id, dst_chain_id, maker, receiver, taker, timelock,
                 maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits, taker_traits, args,
-                signature, extension, order_type, secrets, status, deadline, 
+                signature, extension, order_type, secrets, status, deadline,
                 auction_start_date,
                 auction_end_date,
                 src_escrow_address, dst_escrow_address, src_tx_hash,
-                dst_tx_hash, filled_maker_amount, filled_taker_amount,
+                dst_tx_hash, filled_maker_amount, filled_taker_amount, src_deploy_immutables, dst_deploy_immutables, src_withdraw_immutables, dst_withdraw_immutables, src_event, dest_event, src_withdraw, dst_withdraw,
                 created_at, updated_at
             FROM orders WHERE status = 'unmatched' ORDER BY created_at DESC LIMIT $1 OFFSET $2
             "#
@@ -278,10 +285,10 @@ impl OrderbookProvider {
     pub async fn submit_secret(
         &self,
         order_hash: &str,
-        secret: &str,
+        secret: &str
     ) -> Result<(), OrderbookError> {
         // First, check if the order exists and get its status
-      
+
         // Get the current secrets for the order
         let current_secrets_result: Result<serde_json::Value, sqlx::Error> =
             sqlx::query_scalar("SELECT secrets FROM orders WHERE order_hash = $1")
@@ -297,33 +304,24 @@ impl OrderbookProvider {
             Err(e) => return Err(OrderbookError::Database(e)),
         };
 
-        // Parse the current secrets array
-        let mut secrets_array = if let serde_json::Value::Array(arr) = current_secrets {
-            arr
-        } else {
-            vec![]
-        };
+        let secret_array: Vec<SecretEntry> = serde_json::from_value(current_secrets).unwrap();
 
-        // Find the next available index
-        let next_index = secrets_array.len() as u32;
+        let mut c_secret = secret_array[0].clone();
 
-        // Create a new secret entry
-        let mut hasher = Sha256::new();
-        hasher.update(secret.as_bytes());
-        let result = hasher.finalize();
-        let secret_entry = serde_json::json!({
-            "index": next_index,
+        c_secret.secret = Some(secret.to_string());
+
+        let secret_entry = serde_json::json!([{
+            "index": 0,
             "secret": secret,
-            "secretHash": hex::encode(result)
-        });
+            "secret_hash": c_secret.secret_hash
+        }]);
 
-        // Add the new secret entry to the array
-        secrets_array.push(secret_entry);
+        // let new_vec = vec![secret_entry];
 
-        // Update the order with the new secrets array
+        // Update the order with the new secrets array and immutables
         let updated_rows =
             sqlx::query("UPDATE orders SET secrets = $1, updated_at = NOW() WHERE order_hash = $2")
-                .bind(&serde_json::Value::Array(secrets_array))
+                .bind(&secret_entry)
                 .bind(order_hash)
                 .execute(&self.pool)
                 .await?;
@@ -351,21 +349,54 @@ impl OrderbookProvider {
             Err(e) => return Err(OrderbookError::Database(e)),
         };
 
-        // Parse the secrets array and return all secrets
-        if let serde_json::Value::Array(arr) = secrets {
-            let mut secrets_vec = Vec::new();
-            for secret_entry in arr {
-                if let serde_json::Value::Object(obj) = secret_entry {
-                    if let Some(serde_json::Value::String(secret)) = obj.get("secret") {
-                        if secret != "null" {
-                            secrets_vec.push(secret.clone());
-                        }
-                    }
-                }
-            }
-            return Ok(secrets_vec);
+        let secret_entries: Vec<SecretEntry> = serde_json::from_value(secrets)?;
+        let secret_strings: Vec<String> = secret_entries
+            .into_iter()
+            .filter_map(|entry| entry.secret)
+            .collect();
+
+        Ok(secret_strings)
+    }
+
+    /// Update a specific field for an order
+    pub async fn update_order_field(
+        &self,
+        order_hash: &str,
+        field_name: &str,
+        json_value: &serde_json::Value,
+    ) -> Result<(), OrderbookError> {
+        // Validate field name to prevent SQL injection
+        let valid_fields = [
+            "src_deploy_immutables",
+            "dst_deploy_immutables", 
+            "src_withdraw_immutables",
+            "dst_withdraw_immutables"
+        ];
+
+        if !valid_fields.contains(&field_name) {
+            return Err(OrderbookError::Validation(format!(
+                "Invalid field name: {}. Valid fields are: {}",
+                field_name,
+                valid_fields.join(", ")
+            )));
         }
 
-        Ok(Vec::new())
+        // Build dynamic SQL query
+        let sql = format!(
+            "UPDATE orders SET {} = $1, updated_at = NOW() WHERE order_hash = $2",
+            field_name
+        );
+
+        let updated_rows = sqlx::query(&sql)
+            .bind(json_value)
+            .bind(order_hash)
+            .execute(&self.pool)
+            .await?;
+
+        if updated_rows.rows_affected() == 0 {
+            return Err(OrderbookError::Validation("Order not found".to_string()));
+        }
+
+        Ok(())
     }
 }
