@@ -98,6 +98,7 @@ pub async fn get_active_orders(
                         args: order.args.clone(),
                         order_type: order.order_type.clone(),
                         secrets,
+                        status: order.status.clone(),
                         src_deploy_immutables: order.src_deploy_immutables.clone(),
                         dst_deploy_immutables: order.dst_deploy_immutables.clone(),
                         src_withdraw_immutables: order.src_withdraw_immutables.clone(),

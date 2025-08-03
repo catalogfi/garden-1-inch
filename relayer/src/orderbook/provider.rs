@@ -255,16 +255,7 @@ impl OrderbookProvider {
         // Get orders with pagination
         let orders = sqlx::query_as::<_, CrossChainOrder>(
             r#"
-            SELECT
-                id, order_hash, src_chain_id, dst_chain_id, maker, receiver, taker, timelock,
-                maker_asset, taker_asset, making_amount, taking_amount, salt, maker_traits, taker_traits, args,
-                signature, extension, order_type, secrets, status, deadline,
-                auction_start_date,
-                auction_end_date,
-                src_escrow_address, dst_escrow_address, src_tx_hash,
-                dst_tx_hash, filled_maker_amount, filled_taker_amount, src_deploy_immutables, dst_deploy_immutables, src_withdraw_immutables, dst_withdraw_immutables, src_event, dest_event, src_withdraw, dst_withdraw,
-                created_at, updated_at
-            FROM orders WHERE status = 'unmatched' ORDER BY created_at DESC LIMIT $1 OFFSET $2
+            SELECT * FROM orders WHERE status = 'unmatched' ORDER BY created_at DESC LIMIT $1 OFFSET $2
             "#
         )
         .bind(limit as i64)

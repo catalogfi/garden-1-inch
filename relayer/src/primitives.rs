@@ -267,6 +267,7 @@ pub struct ActiveOrderOutput {
     pub args: serde_json::Value,
     pub order_type: OrderType,
     pub secrets: Vec<SecretEntry>,
+    pub status: OrderStatus,
     pub src_deploy_immutables: Option<serde_json::Value>,
     pub dst_deploy_immutables: Option<serde_json::Value>,
     pub src_withdraw_immutables: Option<serde_json::Value>,

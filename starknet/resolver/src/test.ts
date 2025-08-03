@@ -31,7 +31,7 @@ async function testResolver() {
     if (allOrders.length === 0) {
       console.log('No orders found - skipping Starknet filtering test');
     } else {
-      const starknetOrders = allOrders.filter(order => order.srcChainId === STARKNET_CHAIN_ID);
+      const starknetOrders = allOrders.filter(order => order.src_chain_id == STARKNET_CHAIN_ID.toString());
       console.log(`Found ${starknetOrders.length} starknet orders`);
 
       console.log("Starknet orders:", JSON.stringify(starknetOrders, null, 2));

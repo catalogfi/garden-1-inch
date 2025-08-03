@@ -16,9 +16,6 @@ use starknet::ContractAddress;
     struct Storage {
         // ESCROW contract address
         pub escrow_contract: ContractAddress,        
-        // Owner/admin of the resolver
-        pub owner: ContractAddress,
-
         pub chain_id: felt252
     }
 
@@ -48,17 +45,12 @@ use starknet::ContractAddress;
     #[constructor]
     fn constructor(ref self: ContractState, escrow_contract: ContractAddress) {
         self.escrow_contract.write(escrow_contract);
-        self.owner.write(starknet::get_caller_address());
         let tx_info = get_execution_info_v2_syscall().unwrap_syscall().unbox().tx_info.unbox();
         self.chain_id.write(tx_info.chain_id);
     }
 
     #[abi(embed_v0)]
     pub impl ResolverImpl of IResolver<ContractState> {
-
-        fn owner(self: @ContractState) -> ContractAddress {
-            self.owner.read()
-        }
 
         fn create_source(
             ref self: ContractState,
@@ -71,9 +63,6 @@ use starknet::ContractAddress;
             secret_hash: [u32; 8],
             amount: u256
         ) {
-            // Verify resolver is authorized
-            let caller = starknet::get_caller_address();
-            assert!(caller == resolver_address, "Resolver: caller mismatch");
             // Create outbound order input
             let outbound_input = OutboundOrderInput {
                 user_intent,
@@ -117,10 +106,6 @@ use starknet::ContractAddress;
             secret_hash: [u32; 8],
             amount: u256
         ) {
-            // Verify resolver is authorized
-            let caller = starknet::get_caller_address();
-            assert!(caller == resolver_address, "Resolver: caller mismatch");
-
             // Create inbound order input
             let inbound_input = InboundOrderInput {
                 token,
@@ -149,9 +134,6 @@ use starknet::ContractAddress;
             order_hash: felt252,
             secret: Array<u32>,
         ) {
-            let caller = starknet::get_caller_address();
-            assert!(caller == self.owner.read(), "Resolver: caller mismatch");
-
             IESCROWDispatcher { contract_address: self.escrow_contract.read() }
                 .withdraw(token, order_hash, secret);
         }

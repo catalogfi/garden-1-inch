@@ -113,13 +113,13 @@ async function main() {
     }
 
   } catch (error) {
-    console.error("❌ Deployment failed:", error);
+    console.error("Deployment failed:", error);
     process.exit(1);
   }
 }
 
 // Run the deployment script
 main().catch((error) => {
-  console.error("❌ Script execution failed:", error);
+  console.error("Script execution failed:", error);
   process.exit(1);
 });

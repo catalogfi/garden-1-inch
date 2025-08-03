@@ -5,6 +5,10 @@ import {
   Contract,
   RpcProvider,
   stark as sn,
+  shortString,
+  TypedData,
+  TypedDataRevision,
+  WeierstrassSignatureType
 } from "starknet";
 import { ethers, parseEther, sha256 } from "ethers";
 import { randomBytes } from "crypto";
@@ -188,694 +192,499 @@ describe("Starknet ESCROW", () => {
 
   });
 
-  // describe("-- ESCROW Transfer Funds --", () => {
-  //   it("Should transfer funds from alice to escrow", async () => {
-  //     let transfer_funds_res = await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "transfer_funds",
-  //       calldata: [STARK, cairo.uint256(parseEther("1")).low, cairo.uint256(parseEther("1")).high]
-  //     });
-  //     console.log("Transfer funds: ", transfer_funds_res);
-  //   });
-  // });
+  describe("-- ESCROW Create Outbound Order --", () => {
+    it("Should create outbound order with valid signature", async () => {
+      // Define the UserIntent type structure for signing
+      const USER_INTENT_TYPE = {
+        StarknetDomain: [
+          { name: "name", type: "shortstring" },
+          { name: "version", type: "shortstring" },
+          { name: "chainId", type: "shortstring" },
+          { name: "revision", type: "shortstring" },
+        ],
+        UserIntent: [
+          { name: "salt", type: "u256" },
+          { name: "maker", type: "ContractAddress" },
+          { name: "receiver", type: "ContractAddress" },
+          { name: "maker_asset", type: "ContractAddress" },
+          { name: "taker_asset", type: "ContractAddress" },
+          { name: "making_amount", type: "u256" },
+          { name: "taking_amount", type: "u256" },
+        ],
+      };
 
-  // describe("-- ESCROW Verify Signature --", () => {
-  //   it("Should verify signature", async () => {
+      const DOMAIN = {
+        name: "ESCROW",
+        version: shortString.encodeShortString("1"),
+        chainId: CHAIN_ID,
+        revision: TypedDataRevision.ACTIVE,
+      };
 
-  //     const SIGNATURE_VERIFY_TYPE = {
-  //       StarknetDomain: [
-  //         { name: "name", type: "shortstring" },
-  //         { name: "version", type: "shortstring" },
-  //         { name: "chainId", type: "shortstring" },
-  //         { name: "revision", type: "shortstring" },
-  //       ],
-  //       VerifySignature: [
-  //         { name: "token", type: "ContractAddress" },
-  //         { name: "amount", type: "u256" },
-  //       ],
-  //     };
+      const userIntent = {
+        salt: cairo.uint256(123456),
+        maker: alice.address,
+        receiver: bob.address,
+        maker_asset: STARK,
+        taker_asset: ETH,
+        making_amount: cairo.uint256(parseEther("0.1")),
+        taking_amount: cairo.uint256(parseEther("0.1")),
+      };
 
-  //     const DOMAIN = {
-  //       name: "ESCROW",
-  //       version: shortString.encodeShortString("1"),
-  //       chainId: CHAIN_ID,
-  //       revision: TypedDataRevision.ACTIVE,
-  //     };
+      console.log("UserIntent: ", userIntent);
 
-  //     const userIntent = {
-  //       token: STARK,
-  //       amount: cairo.uint256(AMOUNT),
-  //     };
+      // Create typed data for signing
+      const typedData: TypedData = {
+        domain: DOMAIN,
+        primaryType: "UserIntent",
+        types: USER_INTENT_TYPE,
+        message: userIntent,
+      };
 
-  //     const typedData = {
-  //       domain: DOMAIN,
-  //       primaryType: "VerifySignature",
-  //       types: SIGNATURE_VERIFY_TYPE,
-  //       message: userIntent,
-  //     };
+      console.log("TypedData: ", typedData);
 
-  //     let signature = await alice.signMessage(typedData) as WeierstrassSignatureType;
-  //     const { r, s } = signature;
-  //     const signatureArray = [r, s];
+      // Sign the UserIntent with alice's account
+      const signature = (await alice.signMessage(typedData)) as WeierstrassSignatureType;
+      const { r, s } = signature;
 
-  //     console.log("Signature: ", signature);
-  //     let verify_signature_res = await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "verify_signature",
-  //       calldata: [STARK, cairo.uint256(AMOUNT).low, cairo.uint256(AMOUNT).high,signatureArray]
-  //     });
+      // Convert signature to the format expected by the contract
+      const signatureArray = [r, s];
 
-  //     console.log("Verify signature: ", verify_signature_res);
-  //   });
-  // });
+      console.log("Signature: ", signature);
 
-  // describe("-- ESCROW Create Outbound Order --", () => {
-  //   it("Should create outbound order with valid signature", async () => {
-  //     // Define the UserIntent type structure for signing
-  //     const USER_INTENT_TYPE = {
-  //       StarknetDomain: [
-  //         { name: "name", type: "shortstring" },
-  //         { name: "version", type: "shortstring" },
-  //         { name: "chainId", type: "shortstring" },
-  //         { name: "revision", type: "shortstring" },
-  //       ],
-  //       UserIntent: [
-  //         { name: "salt", type: "u256" },
-  //         { name: "maker", type: "ContractAddress" },
-  //         { name: "receiver", type: "ContractAddress" },
-  //         { name: "maker_asset", type: "ContractAddress" },
-  //         { name: "taker_asset", type: "ContractAddress" },
-  //         { name: "making_amount", type: "u256" },
-  //         { name: "taking_amount", type: "u256" },
-  //       ],
-  //     };
+      let isVerified = await alice.verifyMessageInStarknet(typedData, signature, alice.address);
+      console.log("Is verified: ", isVerified);
 
-  //     const DOMAIN = {
-  //       name: "ESCROW",
-  //       version: shortString.encodeShortString("1"),
-  //       chainId: CHAIN_ID,
-  //       revision: TypedDataRevision.ACTIVE,
-  //     };
+      const orderHash = generateOrderId();
 
-  //     const userIntent = {
-  //       salt: cairo.uint256(123456),
-  //       maker: alice.address,
-  //       receiver: bob.address,
-  //       maker_asset: STARK,
-  //       taker_asset: ETH,
-  //       making_amount: cairo.uint256(parseEther("0.1")),
-  //       taking_amount: cairo.uint256(parseEther("0.1")),
-  //     };
+      console.log("AMOUNT: ", parseEther("0.1"));
+      console.log("AMOUNT_HIGH: ", cairo.uint256(parseEther("0.1")).high);
+      console.log("AMOUNT_LOW: ", cairo.uint256(parseEther("0.1")).low);
 
-  //     console.log("UserIntent: ", userIntent);
+      const input = {
+        user_intent: {
+          salt: userIntent.salt,
+          maker: userIntent.maker,
+          receiver: userIntent.receiver,
+          maker_asset: userIntent.maker_asset,
+          taker_asset: userIntent.taker_asset,
+          making_amount: userIntent.making_amount,
+          taking_amount: userIntent.taking_amount,
+        },
+        signature: signatureArray,
+        token: STARK,
+        order_hash: orderHash,
+        // user_address: alice.address,
+        // resolver_address: bob.address,
+        user_address: alice.address,
+        resolver_address: bob.address,
+        timelock: TIMELOCK,
+        secret_hash: secretHash1,
+        amount: cairo.uint256(parseEther("0.1")).low
+      };
 
-  //     // Create typed data for signing
-  //     const typedData: TypedData = {
-  //       domain: DOMAIN,
-  //       primaryType: "UserIntent",
-  //       types: USER_INTENT_TYPE,
-  //       message: userIntent,
-  //     };
+      // const call_data = [
+      //   7,
+      //   userIntent.salt.low,
+      //   userIntent.salt.high,
+      //   userIntent.maker,
+      //   userIntent.receiver,
+      //   userIntent.maker_asset,
+      //   userIntent.taker_asset,
+      //   userIntent.making_amount.low,
+      //   userIntent.making_amount.high,
+      //   userIntent.taking_amount.low,
+      //   userIntent.taking_amount.high,
+      //   ...signatureArray,
+      //   STARK,
+      //   orderHash,
+      //   alice.address,
+      //   bob.address,
+      //   TIMELOCK,
+      //   cairo.uint256(parseEther("0.1")).low,
+      //   cairo.uint256(parseEther("0.1")).high,
+      //   ...secretHash1
+      // ]
 
-  //     console.log("TypedData: ", typedData);
+      // console.log("Call data: ", call_data);
 
-  //     // Sign the UserIntent with alice's account
-  //     const signature = (await alice.signMessage(typedData)) as WeierstrassSignatureType;
-  //     const { r, s } = signature;
+      // let create_outbound_order_res = await starknetESCROW.create_outbound_order(input);
+      // console.log("Create outbound order: ", create_outbound_order_res);
 
-  //     // Convert signature to the format expected by the contract
-  //     const signatureArray = [r, s];
+      let create_outbound_order_res = await alice.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "create_outbound_order",
+        calldata: callData.compile("create_outbound_order", {
+          user_intent: userIntent,
+          signature: signatureArray,
+          token: STARK,
+          order_hash: orderHash,
+          user_address: alice.address,
+          resolver_address: bob.address,
+          timelock: TIMELOCK,
+        })
+      });
+      console.log("Create outbound order: ", create_outbound_order_res);
+    });
+  });
 
-  //     console.log("Signature: ", signature);
+  describe("-- ESCROW Create Inbound Order --", () => {
+    it("Should create inbound order without signature", async () => {
+      const orderHash = generateOrderId();
 
-  //     let isVerified = await alice.verifyMessageInStarknet(typedData, signature, alice.address);
-  //     console.log("Is verified: ", isVerified);
+      const input = {
+        token: STARK,
+        order_hash: orderHash,
+        resolver_address: bob.address,
+        user_address: alice.address,
+        timelock: TIMELOCK,
+        amount: cairo.uint256(AMOUNT),
+        secret_hash: secretHash3,
+      };
 
-  //     const orderHash = generateOrderId();
+      await bob.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "create_inbound_order",
+        calldata: callData.compile("create_inbound_order", input),
+      });
 
-  //     console.log("AMOUNT: ", parseEther("0.1"));
-  //     console.log("AMOUNT_HIGH: ", cairo.uint256(parseEther("0.1")).high);
-  //     console.log("AMOUNT_LOW: ", cairo.uint256(parseEther("0.1")).low);
+      // Verify order was created
+    const order = await starknetESCROW.get_order(STARK, orderHash);
+      expect(order.initiator).toBe(BigInt(bob.address));
+      expect(order.redeemer).toBe(BigInt(alice.address));
+      expect(order.amount).toBe(AMOUNT);
+      expect(order.timelock).toBe(TIMELOCK);
+      expect(order.is_fulfilled).toBe(false);
+    });
+  });
 
-  //     const input = {
-  //       user_intent: {
-  //         salt: userIntent.salt,
-  //         maker: userIntent.maker,
-  //         receiver: userIntent.receiver,
-  //         maker_asset: userIntent.maker_asset,
-  //         taker_asset: userIntent.taker_asset,
-  //         making_amount: userIntent.making_amount,
-  //         taking_amount: userIntent.taking_amount,
-  //       },
-  //       signature: signatureArray,
-  //       token: STARK,
-  //       order_hash: orderHash,
-  //       // user_address: alice.address,
-  //       // resolver_address: bob.address,
-  //       user_address: alice.address,
-  //       resolver_address: bob.address,
-  //       timelock: TIMELOCK,
-  //       secret_hash: secretHash1,
-  //       amount: cairo.uint256(parseEther("0.1")).low
-  //     };
+  describe("-- ESCROW Withdraw --", () => {
+    it("Should withdraw with correct secret", async () => {
+      // First create an order
+      const orderHash = generateOrderId();
 
-  //     // const call_data = [
-  //     //   7,
-  //     //   userIntent.salt.low,
-  //     //   userIntent.salt.high,
-  //     //   userIntent.maker,
-  //     //   userIntent.receiver,
-  //     //   userIntent.maker_asset,
-  //     //   userIntent.taker_asset,
-  //     //   userIntent.making_amount.low,
-  //     //   userIntent.making_amount.high,
-  //     //   userIntent.taking_amount.low,
-  //     //   userIntent.taking_amount.high,
-  //     //   ...signatureArray,
-  //     //   STARK,
-  //     //   orderHash,
-  //     //   alice.address,
-  //     //   bob.address,
-  //     //   TIMELOCK,
-  //     //   cairo.uint256(parseEther("0.1")).low,
-  //     //   cairo.uint256(parseEther("0.1")).high,
-  //     //   ...secretHash1
-  //     // ]
+      const input = {
+        token: STARK,
+        order_hash: orderHash,
+        resolver_address: alice.address,
+        user_address: bob.address,
+        timelock: TIMELOCK,
+        amount: cairo.uint256(AMOUNT),
+        secret_hash: secretHash4,
+      };
 
-  //     // console.log("Call data: ", call_data);
+      await alice.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "create_inbound_order",
+        calldata: callData.compile("create_inbound_order", input),
+      });
 
-  //     // let create_outbound_order_res = await starknetESCROW.create_outbound_order(input);
-  //     // console.log("Create outbound order: ", create_outbound_order_res);
+      // Now withdraw with correct secret
+      const bobOldBalance = await stark.balanceOf(bob.address);
+      const secret = hexToU32Array(secret4);
 
-  //     let create_outbound_order_res = await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "create_outbound_order",
-  //       calldata: callData.compile("create_outbound_order", {
-  //         user_intent: userIntent,
-  //         signature: signatureArray,
-  //         token: STARK,
-  //         order_hash: orderHash,
-  //         user_address: alice.address,
-  //         resolver_address: bob.address,
-  //         timelock: TIMELOCK,
-  //       })
-  //     });
-  //     console.log("Create outbound order: ", create_outbound_order_res);
-  //   });
-  // });
+      await bob.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "withdraw",
+        calldata: {
+          token: STARK,
+          order_hash: orderHash,
+          secret: secret,
+        },
+      });
 
-  //   // it("Should not create outbound order with invalid signature", async () => {
-  //   //   // Define the UserIntent type structure for signing
-  //   //   const USER_INTENT_TYPE = {
-  //   //     StarknetDomain: [
-  //   //       { name: "name", type: "shortstring" },
-  //   //       { name: "version", type: "shortstring" },
-  //   //       { name: "chainId", type: "shortstring" },
-  //   //       { name: "revision", type: "shortstring" },
-  //   //     ],
-  //   //     UserIntent: [
-  //   //       { name: "salt", type: "u256" },
-  //   //       { name: "maker", type: "ContractAddress" },
-  //   //       { name: "receiver", type: "ContractAddress" },
-  //   //       { name: "maker_asset", type: "ContractAddress" },
-  //   //       { name: "taker_asset", type: "ContractAddress" },
-  //   //       { name: "making_amount", type: "u256" },
-  //   //       { name: "taking_amount", type: "u256" },
-  //   //     ],
-  //   //   };
+      const bobBalanceAfterRedeem = await stark.balanceOf(bob.address);
+      expect(bobBalanceAfterRedeem).toBe(bobOldBalance + AMOUNT);
 
-  //   //   const DOMAIN = {
-  //   //     name: "ESCROW",
-  //   //     version: shortString.encodeShortString("1"),
-  //   //     chainId: CHAIN_ID,
-  //   //     revision: TypedDataRevision.ACTIVE,
-  //   //   };
+      // Verify order is fulfilled
+      const order = await starknetESCROW.get_order(STARK, orderHash);
+      expect(order.is_fulfilled).toBe(true);
+    });
 
-  //   //   const userIntent = {
-  //   //     salt: cairo.uint256(123456),
-  //   //     maker: alice.address,
-  //   //     receiver: bob.address,
-  //   //     maker_asset: STARK,
-  //   //     taker_asset: ZERO_ADDRESS,
-  //   //     making_amount: cairo.uint256(AMOUNT),
-  //   //     taking_amount: cairo.uint256(AMOUNT),
-  //   //   };
+    it("Should not withdraw with incorrect secret", async () => {
+      const orderHash = generateOrderId();
 
-  //   //   // Create typed data for signing
-  //   //   const typedData: TypedData = {
-  //   //     domain: DOMAIN,
-  //   //     primaryType: "UserIntent",
-  //   //     types: USER_INTENT_TYPE,
-  //   //     message: userIntent,
-  //   //   };
+      const input = {
+        token: STARK,
+        order_hash: orderHash,
+        resolver_address: alice.address,
+        user_address: bob.address,
+        timelock: TIMELOCK,
+        amount: cairo.uint256(AMOUNT),
+        secret_hash: secretHash5,
+      };
 
-  //   //   // Sign with alice but use wrong signer (bob) for verification
-  //   //   const signature = (await alice.signMessage(typedData)) as WeierstrassSignatureType;
-  //   //   const { r, s } = signature;
+      await alice.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "create_inbound_order",
+        calldata: callData.compile("create_inbound_order", input),
+      });
 
-  //   //   // Create an invalid signature by modifying the values
-  //   //   const invalidSignature = [r + 1n, s + 1n];
+      const invalidSecret = hexToU32Array(sha256(randomBytes(32)));
 
-  //   //   const orderHash = generateOrderId();
+      await expect(
+        bob.execute({
+          contractAddress: starknetESCROW.address,
+          entrypoint: "withdraw",
+          calldata: {
+            token: STARK,
+            order_hash: orderHash,
+            secret: invalidSecret,
+          },
+        })
+      ).rejects.toThrow("ESCROW: incorrect secret");
+    });
 
-  //   //   const input = {
-  //   //     user_intent: {
-  //   //       salt: userIntent.salt,
-  //   //       maker: userIntent.maker,
-  //   //       receiver: userIntent.receiver,
-  //   //       maker_asset: userIntent.maker_asset,
-  //   //       taker_asset: userIntent.taker_asset,
-  //   //       making_amount: userIntent.making_amount,
-  //   //       taking_amount: userIntent.taking_amount,
-  //   //     },
-  //   //     signature: invalidSignature, // Invalid signature
-  //   //     token: STARK,
-  //   //     order_hash: orderHash,
-  //   //     user_address: alice.address,
-  //   //     resolver_address: bob.address,
-  //   //     timelock: TIMELOCK,
-  //   //     amount: cairo.uint256(AMOUNT),
-  //   //     secret_hash: secretHash2,
-  //   //   };
+    it("Should not withdraw already fulfilled order", async () => {
+      const orderHash = generateOrderId();
 
-  //   //   await expect(
-  //   //     alice.execute({
-  //   //       contractAddress: starknetESCROW.address,
-  //   //       entrypoint: "create_outbound_order",
-  //   //       calldata: callData.compile("create_outbound_order", input),
-  //   //     })
-  //   //   ).rejects.toThrow("ESCROW: invalid user signature");
-  //   // });
-  // });
+      const input = {
+        token: STARK,
+        order_hash: orderHash,
+        resolver_address: alice.address,
+        user_address: bob.address,
+        timelock: TIMELOCK,
+        amount: cairo.uint256(AMOUNT),
+        secret_hash: secretHash6,
+      };
 
+      await alice.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "create_inbound_order",
+        calldata: callData.compile("create_inbound_order", input),
+      });
 
-  // describe("-- ESCROW Create Inbound Order --", () => {
-  //   it("Should create inbound order without signature", async () => {
-  //     const orderHash = generateOrderId(
-  //       CHAIN_ID,
-  //       bob.address,
-  //       alice.address,
-  //       TIMELOCK,
-  //       AMOUNT,
-  //       secretHash3
-  //     );
+      // First withdrawal should succeed
+      const secret = hexToU32Array(secret6);
+      await bob.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "withdraw",
+        calldata: {
+          token: STARK,
+          order_hash: orderHash,
+          secret: secret,
+        },
+      });
 
-  //     const input = {
-  //       token: STARK,
-  //       order_hash: orderHash,
-  //       resolver_address: bob.address,
-  //       user_address: alice.address,
-  //       timelock: TIMELOCK,
-  //       amount: cairo.uint256(AMOUNT),
-  //       secret_hash: secretHash3,
-  //     };
+      // Second withdrawal should fail
+      await expect(
+        bob.execute({
+          contractAddress: starknetESCROW.address,
+          entrypoint: "withdraw",
+          calldata: {
+            token: STARK,
+            order_hash: orderHash,
+            secret: secret,
+          },
+        })
+      ).rejects.toThrow("ESCROW: order fulfilled");
+    });
+  });
 
-  //     await bob.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "create_inbound_order",
-  //       calldata: callData.compile("create_inbound_order", input),
-  //     });
+  describe("-- ESCROW Rescue --", () => {
+    it("Should rescue after timelock expires", async () => {
+      const orderHash = generateOrderId();
 
-  //     // Verify order was created
-  //   const order = await starknetESCROW.get_order(STARK, orderHash);
-  //     expect(order.initiator).toBe(BigInt(bob.address));
-  //     expect(order.redeemer).toBe(BigInt(alice.address));
-  //     expect(order.amount).toBe(AMOUNT);
-  //     expect(order.timelock).toBe(TIMELOCK);
-  //     expect(order.is_fulfilled).toBe(false);
-  //   });
-  // });
+      const input = {
+        token: STARK,
+        order_hash: orderHash,
+        resolver_address: alice.address,
+        user_address: bob.address,
+        timelock: TIMELOCK,
+        amount: cairo.uint256(AMOUNT),
+        secret_hash: secretHash7,
+      };
 
-  // describe("-- ESCROW Withdraw --", () => {
-  //   it("Should withdraw with correct secret", async () => {
-  //     // First create an order
-  //     const orderHash = generateOrderId(
-  //       CHAIN_ID,
-  //       alice.address,
-  //       bob.address,
-  //       TIMELOCK,
-  //       AMOUNT,
-  //       secretHash4
-  //     );
+      await alice.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "create_inbound_order",
+        calldata: callData.compile("create_inbound_order", input),
+      });
 
-  //     const input = {
-  //       token: STARK,
-  //       order_hash: orderHash,
-  //       resolver_address: alice.address,
-  //       user_address: bob.address,
-  //       timelock: TIMELOCK,
-  //       amount: cairo.uint256(AMOUNT),
-  //       secret_hash: secretHash4,
-  //     };
-
-  //     await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "create_inbound_order",
-  //       calldata: callData.compile("create_inbound_order", input),
-  //     });
-
-  //     // Now withdraw with correct secret
-  //     const bobOldBalance = await stark.balanceOf(bob.address);
-  //     const secret = hexToU32Array(secret4);
-
-  //     await bob.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "withdraw",
-  //       calldata: {
-  //         token: STARK,
-  //         order_hash: orderHash,
-  //         secret: secret,
-  //       },
-  //     });
-
-  //     const bobBalanceAfterRedeem = await stark.balanceOf(bob.address);
-  //     expect(bobBalanceAfterRedeem).toBe(bobOldBalance + AMOUNT);
-
-  //     // Verify order is fulfilled
-  //     const order = await starknetESCROW.get_order(STARK, orderHash);
-  //     expect(order.is_fulfilled).toBe(true);
-  //   });
-
-  //   it("Should not withdraw with incorrect secret", async () => {
-  //     const orderHash = generateOrderId(
-  //       CHAIN_ID,
-  //       alice.address,
-  //       bob.address,
-  //       TIMELOCK,
-  //       AMOUNT,
-  //       secretHash5
-  //     );
-
-  //     const input = {
-  //       token: STARK,
-  //       order_hash: orderHash,
-  //       resolver_address: alice.address,
-  //       user_address: bob.address,
-  //       timelock: TIMELOCK,
-  //       amount: cairo.uint256(AMOUNT),
-  //       secret_hash: secretHash5,
-  //     };
-
-  //     await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "create_inbound_order",
-  //       calldata: callData.compile("create_inbound_order", input),
-  //     });
-
-  //     const invalidSecret = hexToU32Array(sha256(randomBytes(32)));
-
-  //     await expect(
-  //       bob.execute({
-  //         contractAddress: starknetESCROW.address,
-  //         entrypoint: "withdraw",
-  //         calldata: {
-  //           token: STARK,
-  //           order_hash: orderHash,
-  //           secret: invalidSecret,
-  //         },
-  //       })
-  //     ).rejects.toThrow("ESCROW: incorrect secret");
-  //   });
-
-  //   it("Should not withdraw already fulfilled order", async () => {
-  //     const orderHash = generateOrderId(
-  //       CHAIN_ID,
-  //       alice.address,
-  //       bob.address,
-  //       TIMELOCK,
-  //       AMOUNT,
-  //       secretHash6
-  //     );
-
-  //     const input = {
-  //       token: STARK,
-  //       order_hash: orderHash,
-  //       resolver_address: alice.address,
-  //       user_address: bob.address,
-  //       timelock: TIMELOCK,
-  //       amount: cairo.uint256(AMOUNT),
-  //       secret_hash: secretHash6,
-  //     };
-
-  //     await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "create_inbound_order",
-  //       calldata: callData.compile("create_inbound_order", input),
-  //     });
-
-  //     // First withdrawal should succeed
-  //     const secret = hexToU32Array(secret6);
-  //     await bob.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "withdraw",
-  //       calldata: {
-  //         token: STARK,
-  //         order_hash: orderHash,
-  //         secret: secret,
-  //       },
-  //     });
-
-  //     // Second withdrawal should fail
-  //     await expect(
-  //       bob.execute({
-  //         contractAddress: starknetESCROW.address,
-  //         entrypoint: "withdraw",
-  //         calldata: {
-  //           token: STARK,
-  //           order_hash: orderHash,
-  //           secret: secret,
-  //         },
-  //       })
-  //     ).rejects.toThrow("ESCROW: order fulfilled");
-  //   });
-  // });
-
-  // describe("-- ESCROW Rescue --", () => {
-  //   it("Should rescue after timelock expires", async () => {
-  //     const orderHash = generateOrderId(
-  //       CHAIN_ID,
-  //       alice.address,
-  //       bob.address,
-  //       TIMELOCK,
-  //       AMOUNT,
-  //       secretHash7
-  //     );
-
-  //     const input = {
-  //       token: STARK,
-  //       order_hash: orderHash,
-  //       resolver_address: alice.address,
-  //       user_address: bob.address,
-  //       timelock: TIMELOCK,
-  //       amount: cairo.uint256(AMOUNT),
-  //       secret_hash: secretHash7,
-  //     };
-
-  //     await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "create_inbound_order",
-  //       calldata: callData.compile("create_inbound_order", input),
-  //     });
-
-  //     // Wait for timelock to expire (in real test, you'd advance time)
-  //     // For now, we'll assume time has passed
+      // Wait for timelock to expire (in real test, you'd advance time)
+      // For now, we'll assume time has passed
       
-  //     const aliceBalanceBefore = await stark.balanceOf(alice.address);
+      const aliceBalanceBefore = await stark.balanceOf(alice.address);
 
-  //     await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "rescue",
-  //       calldata: {
-  //         token: STARK,
-  //         order_hash: orderHash,
-  //       },
-  //     });
+      await alice.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "rescue",
+        calldata: {
+          token: STARK,
+          order_hash: orderHash,
+        },
+      });
 
-  //     const aliceBalanceAfter = await stark.balanceOf(alice.address);
-  //     expect(aliceBalanceAfter).toBe(aliceBalanceBefore + AMOUNT);
+      const aliceBalanceAfter = await stark.balanceOf(alice.address);
+      expect(aliceBalanceAfter).toBe(aliceBalanceBefore + AMOUNT);
 
-  //     // Verify order is fulfilled
-  //         const order = await starknetESCROW.get_order(STARK, orderHash);
-  //     expect(order.is_fulfilled).toBe(true);
-  //   });
+      // Verify order is fulfilled
+          const order = await starknetESCROW.get_order(STARK, orderHash);
+      expect(order.is_fulfilled).toBe(true);
+    });
 
-  //   it("Should not rescue before timelock expires", async () => {
-  //     const orderHash = generateOrderId(
-  //       CHAIN_ID,
-  //       alice.address,
-  //       bob.address,
-  //       TIMELOCK,
-  //       AMOUNT,
-  //       secretHash1
-  //     );
+    it("Should not rescue before timelock expires", async () => {
+        const orderHash = generateOrderId();
 
-  //     const input = {
-  //       token: STARK,
-  //       order_hash: orderHash,
-  //       resolver_address: alice.address,
-  //       user_address: bob.address,
-  //       timelock: TIMELOCK,
-  //       amount: cairo.uint256(AMOUNT),
-  //       secret_hash: secretHash1,
-  //     };
+      const input = {
+        token: STARK,
+        order_hash: orderHash,
+        resolver_address: alice.address,
+        user_address: bob.address,
+        timelock: TIMELOCK,
+        amount: cairo.uint256(AMOUNT),
+        secret_hash: secretHash1,
+      };
 
-  //     await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "create_inbound_order",
-  //       calldata: callData.compile("create_inbound_order", input),
-  //     });
+      await alice.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "create_inbound_order",
+        calldata: callData.compile("create_inbound_order", input),
+      });
 
-  //     // Try to rescue immediately (before timelock expires)
-  //     await expect(
-  //       alice.execute({
-  //         contractAddress: starknetESCROW.address,
-  //         entrypoint: "rescue",
-  //         calldata: {
-  //           token: STARK,
-  //           order_hash: orderHash,
-  //         },
-  //       })
-  //     ).rejects.toThrow("ESCROW: order not expired");
-  //   });
-  // });
+      // Try to rescue immediately (before timelock expires)
+      await expect(
+        alice.execute({
+          contractAddress: starknetESCROW.address,
+          entrypoint: "rescue",
+          calldata: {
+            token: STARK,
+            order_hash: orderHash,
+          },
+        })
+      ).rejects.toThrow("ESCROW: order not expired");
+    });
+  });
 
-  // describe("-- ESCROW Get Order --", () => {
-  //   it("Should return correct order information", async () => {
-  //     const orderHash = generateOrderId(
-  //       CHAIN_ID,
-  //       alice.address,
-  //       bob.address,
-  //       TIMELOCK,
-  //       AMOUNT,
-  //       secretHash2
-  //     );
+  describe("-- ESCROW Get Order --", () => {
+    it("Should return correct order information", async () => {
+      const orderHash = generateOrderId();
 
-  //     const input = {
-  //       token: STARK,
-  //       order_hash: orderHash,
-  //       resolver_address: alice.address,
-  //       user_address: bob.address,
-  //       timelock: TIMELOCK,
-  //       amount: cairo.uint256(AMOUNT),
-  //       secret_hash: secretHash2,
-  //     };
+      const input = {
+        token: STARK,
+        order_hash: orderHash,
+        resolver_address: alice.address,
+        user_address: bob.address,
+        timelock: TIMELOCK,
+        amount: cairo.uint256(AMOUNT),
+        secret_hash: secretHash2,
+      };
 
-  //     await alice.execute({
-  //       contractAddress: starknetESCROW.address,
-  //       entrypoint: "create_inbound_order",
-  //       calldata: callData.compile("create_inbound_order", input),
-  //     });
+      await alice.execute({
+        contractAddress: starknetESCROW.address,
+        entrypoint: "create_inbound_order",
+        calldata: callData.compile("create_inbound_order", input),
+      });
 
-  //     const order = await starknetESCROW.get_order(STARK, orderHash);
+      const order = await starknetESCROW.get_order(STARK, orderHash);
 
-  //     expect(order).toBeTruthy();
-  //     expect(order.is_fulfilled).toBe(false);
-  //     expect(order.initiator).toBe(BigInt(alice.address));
-  //     expect(order.redeemer).toBe(BigInt(bob.address));
-  //     expect(typeof order.initiated_at).toBe("bigint");
-  //     expect(order.timelock).toBe(TIMELOCK);
-  //     expect(order.amount).toBe(AMOUNT);
-  //   });
-  // });
+      expect(order).toBeTruthy();
+      expect(order.is_fulfilled).toBe(false);
+      expect(order.initiator).toBe(BigInt(alice.address));
+      expect(order.redeemer).toBe(BigInt(bob.address));
+      expect(typeof order.initiated_at).toBe("bigint");
+      expect(order.timelock).toBe(TIMELOCK);
+      expect(order.amount).toBe(AMOUNT);
+    });
+  });
 
-  // it("Should create outbound order with proper parameters", async () => {
-  //   // Generate a random order hash
-  //   const orderHash = generateOrderId();
+  it("Should create outbound order with proper parameters", async () => {
+    // Generate a random order hash
+    const orderHash = generateOrderId();
     
-  //   // Generate a random secret and its hash
-  //   const secret = sha256(randomBytes(32));
-  //   const secretHash = hexToU32Array(sha256(secret));
+    // Generate a random secret and its hash
+    const secret = sha256(randomBytes(32));
+    const secretHash = hexToU32Array(sha256(secret));
 
-  //   console.log("Secret: ", secret);
-  //   console.log("Secret Hash: ", secretHash);
+    console.log("Secret: ", secret);
+    console.log("Secret Hash: ", secretHash);
     
-  //   // Create UserIntent for signature verification
-  //   const userIntent = {
-  //     salt: cairo.uint256(123456),
-  //     maker: alice.address,
-  //     receiver: charlie.address,
-  //     maker_asset: STARK,
-  //     taker_asset: ZERO_ADDRESS,
-  //     making_amount: cairo.uint256(AMOUNT),
-  //     taking_amount: cairo.uint256(AMOUNT),
-  //   };
+    // Create UserIntent for signature verification
+    const userIntent = {
+      salt: cairo.uint256(123456),
+      maker: alice.address,
+      receiver: charlie.address,
+      maker_asset: STARK,
+      taker_asset: ZERO_ADDRESS,
+      making_amount: cairo.uint256(AMOUNT),
+      taking_amount: cairo.uint256(AMOUNT),
+    };
 
-  //   // Define the UserIntent type structure for signing
-  //   const USER_INTENT_TYPE = {
-  //     StarknetDomain: [
-  //       { name: "name", type: "shortstring" },
-  //       { name: "version", type: "shortstring" },
-  //       { name: "chainId", type: "shortstring" },
-  //       { name: "revision", type: "shortstring" },
-  //     ],
-  //     UserIntent: [
-  //       { name: "salt", type: "u256" },
-  //       { name: "maker", type: "ContractAddress" },
-  //       { name: "receiver", type: "ContractAddress" },
-  //       { name: "maker_asset", type: "ContractAddress" },
-  //       { name: "taker_asset", type: "ContractAddress" },
-  //       { name: "making_amount", type: "u256" },
-  //       { name: "taking_amount", type: "u256" },
-  //     ],
-  //   };
+    // Define the UserIntent type structure for signing
+    const USER_INTENT_TYPE = {
+      StarknetDomain: [
+        { name: "name", type: "shortstring" },
+        { name: "version", type: "shortstring" },
+        { name: "chainId", type: "shortstring" },
+        { name: "revision", type: "shortstring" },
+      ],
+      UserIntent: [
+        { name: "salt", type: "u256" },
+        { name: "maker", type: "ContractAddress" },
+        { name: "receiver", type: "ContractAddress" },
+        { name: "maker_asset", type: "ContractAddress" },
+        { name: "taker_asset", type: "ContractAddress" },
+        { name: "making_amount", type: "u256" },
+        { name: "taking_amount", type: "u256" },
+      ],
+    };
 
-  //   const DOMAIN = {
-  //     name: "ESCROW",
-  //     version: shortString.encodeShortString("1"),
-  //     chainId: CHAIN_ID,
-  //     revision: TypedDataRevision.ACTIVE,
-  //   };
+    const DOMAIN = {
+      name: "ESCROW",
+      version: shortString.encodeShortString("1"),
+      chainId: CHAIN_ID,
+      revision: TypedDataRevision.ACTIVE,
+    };
 
-  //   // Create typed data for signing
-  //   const typedData: TypedData = {
-  //     domain: DOMAIN,
-  //     primaryType: "UserIntent",
-  //     types: USER_INTENT_TYPE,
-  //     message: userIntent,
-  //   };
+    // Create typed data for signing
+    const typedData: TypedData = {
+      domain: DOMAIN,
+      primaryType: "UserIntent",
+      types: USER_INTENT_TYPE,
+      message: userIntent,
+    };
 
-  //   // Sign with alice
-  //   const signature = (await alice.signMessage(typedData)) as WeierstrassSignatureType;
-  //   const { r, s } = signature;
-  //   const signatureArray = [r, s];
+    // Sign with alice
+    const signature = (await alice.signMessage(typedData)) as WeierstrassSignatureType;
+    const { r, s } = signature;
+    const signatureArray = [r, s];
 
-  //   // Create the OutboundOrderInput structure
-  //   const outboundOrderInput = {
-  //     user_intent: userIntent,
-  //     signature: signatureArray,
-  //     token: STARK,
-  //     order_hash: orderHash,
-  //     user_address: alice.address,      // who signs (initiator)
-  //     resolver_address: charlie.address,    // who executes (redeemer)
-  //     timelock: TIMELOCK,
-  //     secret_hash: secretHash,
-  //     amount: cairo.uint256(AMOUNT)
-  //   };
+    // Create the OutboundOrderInput structure
+    const outboundOrderInput = {
+      user_intent: userIntent,
+      signature: signatureArray,
+      token: STARK,
+      order_hash: orderHash,
+      user_address: alice.address,      // who signs (initiator)
+      resolver_address: charlie.address,    // who executes (redeemer)
+      timelock: TIMELOCK,
+      secret_hash: secretHash,
+      amount: cairo.uint256(AMOUNT)
+    };
 
-  //   console.log("Creating outbound order with parameters:", {
-  //     orderHash,
-  //     userAddress: alice.address,
-  //     resolverAddress: bob.address,
-  //     token: STARK,
-  //     amount: AMOUNT.toString(),
-  //     timelock: TIMELOCK.toString()
-  //   });
+    console.log("Creating outbound order with parameters:", {
+      orderHash,
+      userAddress: alice.address,
+      resolverAddress: bob.address,
+      token: STARK,
+      amount: AMOUNT.toString(),
+      timelock: TIMELOCK.toString()
+    });
 
-  //   // Call create_outbound_order using the typed contract
-  //   try {
-  //     starknetESCROW.connect(alice);
-  //     const createOutboundOrderRes = await starknetESCROW.create_outbound_order(outboundOrderInput);
-  //     console.log("Create outbound order successful:", createOutboundOrderRes);
+    // Call create_outbound_order using the typed contract
+    try {
+      starknetESCROW.connect(alice);
+      const createOutboundOrderRes = await starknetESCROW.create_outbound_order(outboundOrderInput);
+      console.log("Create outbound order successful:", createOutboundOrderRes);
       
-  //     // Verify the order was created by getting it
-  //     const order = await starknetESCROW.get_order(STARK, orderHash);
-  //     console.log("Order details:", order);
+      // Verify the order was created by getting it
+      const order = await starknetESCROW.get_order(STARK, orderHash);
+      console.log("Order details:", order);
       
-  //   } catch (error) {
-  //     console.error("Error creating outbound order:", error);
-  //     throw error;
-  //   }
-  // });
+    } catch (error) {
+      console.error("Error creating outbound order:", error);
+      throw error;
+    }
+  });
 
   it("Should withdraw order using secret", async () => {
     // Use the same order hash and secret from the previous test

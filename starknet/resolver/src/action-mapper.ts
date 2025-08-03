@@ -20,13 +20,14 @@ export class ActionMapper {
   }
 
   determineAction(order: any): { sourceAction: ActionType; destAction: ActionType } {
-    const status = order.status;
-    
+    // Default to 'unmatched' if status is not provided
+    const status = order.status || 'unmatched';
+  
     let sourceAction: ActionType = ActionType.NoOp;
     let destAction: ActionType = ActionType.NoOp;
 
     // Source actions (only if src_chain_id matches our chain)
-    if (order.src_chain_id === this.chainId) {
+    if (order.src_chain_id == this.chainId) {
       switch (status) {
         case 'unmatched':
           sourceAction = ActionType.DeploySrcEscrow;
@@ -41,7 +42,7 @@ export class ActionMapper {
     }
 
     // Destination actions (only if dst_chain_id matches our chain)
-    if (order.dst_chain_id === this.chainId) {
+    if (order.dst_chain_id == this.chainId) {
       switch (status) {
         case 'source_filled':
           destAction = ActionType.DeployDestEscrow;
@@ -88,7 +89,7 @@ export class ActionMapper {
 
   filterStarknetOrders(orders: any[]): any[] {
     return orders.filter(order => 
-      order.src_chain_id === this.chainId || order.dst_chain_id === this.chainId
+      order.src_chain_id == this.chainId || order.dst_chain_id == this.chainId
     );
   }
 } 

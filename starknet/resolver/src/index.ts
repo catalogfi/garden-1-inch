@@ -41,7 +41,7 @@ class Resolver {
 
       // Filter orders that involve Starknet (either as source or destination)
       const starknetOrders = this.actionMapper.filterStarknetOrders(orders);
-      console.log(`Found ${starknetOrders.length} orders involving Starknet`);
+      console.log(`Found ${starknetOrders.length} Starknet orders`);
 
       if (starknetOrders.length === 0) {
         console.log('No Starknet orders to process');

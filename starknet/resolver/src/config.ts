@@ -9,7 +9,7 @@ export const RESOLVER_ADDRESS = "0x07c3ddf1d8b12ca535493becae82782e537884172a20f
 export const RESOLVER_CONTRACT_ADDRESS = "0x4688ecf254dfa78275085ed99f1565bc72832c3ec92fe0e4d733e3978b007f4";
 
 // API configuration
-export const API_BASE_URL = "http://10.67.21.17:4455";
+export const API_BASE_URL = "http://localhost:4455";
 export const ACTIVE_ORDERS_ENDPOINT = "/orders/active";
 
 // Starknet RPC URL

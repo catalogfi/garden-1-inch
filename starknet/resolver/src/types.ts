@@ -15,19 +15,59 @@ export interface Secret {
   secretHash: string;
 }
 
+export interface Signature {
+  r: string;
+  vs: string;
+}
+
+export interface Extension {
+  customData: string;
+  makerAssetSuffix: string;
+  makerPermit: string;
+  makingAmountData: string;
+  postInteraction: string;
+  preInteraction: string;
+  predicate: string;
+  takerAssetSuffix: string;
+  takingAmountData: string;
+}
+
+export interface OrderData {
+  salt: string;
+  maker_asset: string;
+  taker_asset: string;
+  maker: string;
+  receiver: string;
+  making_amount: string;
+  taking_amount: string;
+  maker_traits: string;
+}
+
 export interface ActiveOrder {
-  orderHash: string;
-  signature: string;
+  order_hash: string;
+  signature: any;
   deadline: number;
-  auctionStartDate: string;
-  auctionEndDate: string;
-  remainingMakerAmount: string;
-  extension: string;
-  srcChainId: number;
-  dstChainId: number;
-  order: Order;
-  orderType: string;
+  auction_start_date: string | null;
+  auction_end_date: string | null;
+  remaining_maker_amount: string;
+  extension: Extension;
+  src_chain_id: string;
+  dst_chain_id: string;
+  order: OrderData;
+  taker: string;
+  timelock: string;
+  taker_traits: string;
+  args: string;
+  order_type: string;
   secrets: Secret[];
+  src_deploy_immutables: string | null;
+  dst_deploy_immutables: string | null;
+  src_withdraw_immutables: string | null;
+  dst_withdraw_immutables: string | null;
+  src_event: string | null;
+  dest_event: string | null;
+  src_withdraw: string | null;
+  dst_withdraw: string | null;
 }
 
 export interface Meta {
@@ -43,6 +83,11 @@ export interface ActiveOrdersResponse {
     meta: Meta;
     items: ActiveOrder[];
   };
+}
+
+export interface SingleOrderResponse {
+  status: string;
+  result: ActiveOrder;
 }
 
 export interface UserIntent {

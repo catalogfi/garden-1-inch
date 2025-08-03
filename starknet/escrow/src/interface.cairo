@@ -56,8 +56,6 @@ pub trait IESCROW<TContractState> {
 #[starknet::interface]
 pub trait IResolver<TContractState> {
 
-    fn owner(self: @TContractState) -> ContractAddress;
-
     fn create_source(
         ref self: TContractState,
         user_address: ContractAddress,

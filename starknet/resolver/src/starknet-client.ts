@@ -71,19 +71,34 @@ export class StarknetClient {
     return u32Array;
   }
 
+  private parseScientificNotation(value: string): string {
+    // Handle scientific notation like "1000e+16"
+    if (value.includes('e') || value.includes('E')) {
+      // Convert scientific notation to decimal string
+      const num = parseFloat(value);
+      if (isNaN(num)) {
+        throw new Error(`Invalid number format: ${value}`);
+      }
+      return num.toString();
+    }
+    
+    // Handle regular number strings
+    return value;
+  }
+
   async createSourceOrder(order: ActiveOrder): Promise<boolean> {
     try {
-      console.log(`Processing order ${order.orderHash} from Starknet`);
+      console.log(`Processing order ${order.order_hash} from Starknet`);
 
       // Convert the order to UserIntent format
       const userIntent: UserIntent = {
         salt: order.order.salt,
         maker: order.order.maker,
         receiver: order.order.receiver,
-        makerAsset: order.order.makerAsset,
-        takerAsset: order.order.takerAsset,
-        makingAmount: order.order.makingAmount,
-        takingAmount: order.order.takingAmount,
+        makerAsset: order.order.maker_asset,
+        takerAsset: order.order.taker_asset,
+        makingAmount: order.order.making_amount,
+        takingAmount: order.order.taking_amount,
       };
 
       // Create typed data for signature verification
@@ -122,14 +137,14 @@ export class StarknetClient {
           receiver: userIntent.receiver,
           maker_asset: userIntent.makerAsset,
           taker_asset: userIntent.takerAsset,
-          making_amount: cairo.uint256(BigInt(userIntent.makingAmount)),
-          taking_amount: cairo.uint256(BigInt(userIntent.takingAmount)),
+          making_amount: cairo.uint256(this.parseScientificNotation(userIntent.makingAmount)),
+          taking_amount: cairo.uint256(this.parseScientificNotation(userIntent.takingAmount)),
         },
       };
 
       // Parse the signature from the order
       const signature = order.signature;
-      const signatureArray = this.parseSignature(signature);
+      const signatureArray = this.parseSignatureFromObject(signature);
 
       // Generate a new order hash for the escrow
       const escrowOrderHash = this.generateOrderHash();
@@ -146,14 +161,14 @@ export class StarknetClient {
           receiver: userIntent.receiver,
           maker_asset: userIntent.makerAsset,
           taker_asset: userIntent.takerAsset,
-          making_amount: cairo.uint256(BigInt(userIntent.makingAmount)),
-          taking_amount: cairo.uint256(BigInt(userIntent.takingAmount)),
+          making_amount: cairo.uint256(this.parseScientificNotation(userIntent.makingAmount)),
+          taking_amount: cairo.uint256(this.parseScientificNotation(userIntent.takingAmount)),
         },
         signature: signatureArray,
         order_hash: escrowOrderHash,
         timelock: TIMELOCK,
         secret_hash: secretHash,
-        amount: cairo.uint256(BigInt(userIntent.makingAmount))
+        amount: cairo.uint256(this.parseScientificNotation(userIntent.makingAmount))
       };
 
       // Execute the create_source function
@@ -163,12 +178,12 @@ export class StarknetClient {
         calldata: this.callData.compile("create_source", input),
       });
 
-      console.log(`Successfully created source order for ${order.orderHash}`);
+      console.log(`Successfully created source order for ${order.order_hash}`);
       console.log('Transaction hash:', result.transaction_hash);
       
       return true;
     } catch (error) {
-      console.error(`Error creating source order for ${order.orderHash}:`, error);
+      console.error(`Error creating source order for ${order.order_hash}:`, error);
       return false;
     }
   }
@@ -182,6 +197,40 @@ export class StarknetClient {
     const s = '0x' + cleanSignature.slice(64, 128);
     
     return [r, s];
+  }
+
+  private parseSignatureFromObject(signature: any): string[] {
+    // Check if signature has the expected structure
+    if (!signature || typeof signature !== 'object') {
+      throw new Error('Invalid signature: signature must be an object');
+    }
+    
+    if (!signature.r || !signature.vs) {
+      throw new Error('Invalid signature: missing r or vs fields');
+    }
+    
+    // Extract r and vs from the signature object
+    const r = signature.r;
+    const vs = signature.vs;
+    
+    // Validate that r and vs are valid hex strings
+    if (typeof r !== 'string' || typeof vs !== 'string') {
+      throw new Error('Invalid signature: r and vs must be strings');
+    }
+    
+    if (!r.startsWith('0x') || !vs.startsWith('0x')) {
+      throw new Error('Invalid signature: r and vs must be hex strings starting with 0x');
+    }
+    
+    try {
+      // Convert hex strings to decimal strings
+      const rDecimal = BigInt(r).toString();
+      const vsDecimal = BigInt(vs).toString();
+      
+      return [rDecimal, vsDecimal];
+    } catch (error) {
+      throw new Error(`Invalid signature: failed to convert hex to decimal: ${error}`);
+    }
   }
 
   async processOrderAction(action: OrderAction): Promise<boolean> {
@@ -212,7 +261,7 @@ export class StarknetClient {
     
     for (const order of orders) {
       // Check if this order involves Starknet (either as source or destination)
-      if (order.src_chain_id === STARKNET_CHAIN_ID || order.dst_chain_id === STARKNET_CHAIN_ID) {
+      if (order.src_chain_id == STARKNET_CHAIN_ID || order.dst_chain_id == STARKNET_CHAIN_ID) {
         console.log(`Processing Starknet order ${order.order_hash} with status: ${order.status}`);
         console.log(`Source chain: ${order.src_chain_id}, Destination chain: ${order.dst_chain_id}`);
         

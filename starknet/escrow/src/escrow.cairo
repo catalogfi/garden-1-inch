@@ -124,10 +124,6 @@ use core::num::traits::Zero;
             assert!(order.redeemer.is_non_zero(), "ESCROW: order not initiated");
             assert!(!order.is_fulfilled, "ESCROW: order fulfilled");
 
-            // Only redeemer can call this function
-            let caller = starknet::get_caller_address();
-            assert!(caller == order.redeemer, "ESCROW: only redeemer can withdraw");
-
             // Verify that the provided secret matches the stored secret hash
             let computed_secret_hash = compute_sha256_u32_array(secret.clone(), 0, 0);
             assert!(computed_secret_hash == order.secret_hash, "ESCROW: incorrect secret");
@@ -184,10 +180,6 @@ use core::num::traits::Zero;
 
             assert!(order.redeemer.is_non_zero(), "ESCROW: order not initiated");
             assert!(!order.is_fulfilled, "ESCROW: order fulfilled");
-
-            // Only redeemer can call this function
-            let caller = starknet::get_caller_address();
-            assert!(caller == order.redeemer, "ESCROW: only redeemer can rescue");
 
             let block_info = get_block_info().unbox();
             let current_block = block_info.block_number;
