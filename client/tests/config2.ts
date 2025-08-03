@@ -40,8 +40,8 @@ export const config = {
         //         }
         //     }
         // },
-
-        source: {
+        
+        destination: {
             chainId: 10143,
             // url: "https://monad-testnet.g.alchemy.com/v2/0XPjrbBAKRJaSJuy6GN8uKX5uy7YquZV",
             url: fromEnv.SRC_CHAIN_RPC,
@@ -56,7 +56,7 @@ export const config = {
                 }
             }
         },
-        destination: {
+        source : {
             chainId: 128123,
             // url: "https://rpc.ankr.com/etherlink_testnet",
             url: fromEnv.DST_CHAIN_RPC,

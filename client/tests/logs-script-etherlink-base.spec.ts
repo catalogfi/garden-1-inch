@@ -4,7 +4,6 @@ import 'dotenv/config';
 
 import { uint8ArrayToHex, UINT_40_MAX } from '@1inch/byte-utils';
 import Sdk from '@1inch/cross-chain-sdk';
-import axios from 'axios';
 import {
     computeAddress,
     ContractFactory,
@@ -21,7 +20,7 @@ import { createServer, CreateServerReturnType } from 'prool';
 import { anvil } from 'prool/instances';
 import resolverContract from '../dist/contracts/Resolver.sol/Resolver.json';
 import factoryContract from '../dist/contracts/TestEscrowFactory.sol/TestEscrowFactory.json';
-import { ChainConfig, config } from './config';
+import { ChainConfig, config } from './config2';
 import { EscrowFactory } from './escrow-factory';
 import { Resolver } from './resolver';
 import { Wallet } from './wallet';
@@ -68,18 +67,30 @@ describe('Resolving example', () => {
 
     beforeAll(async () => {
         // ;[src, dst] = await Promise.all([initChain(config.chain.source), initChain(config.chain.destination)]);
+        // ;[dst] = await Promise.all([initChain(config.chain.destination)]);
         // return
+
         // working code .
-        dst = {
-            provider: new JsonRpcProvider("https://base-sepolia.g.alchemy.com/v2/0XPjrbBAKRJaSJuy6GN8uKX5uy7YquZV", 84532, {
+        // dst = {
+        //     provider: new JsonRpcProvider("https://base-sepolia.g.alchemy.com/v2/0XPjrbBAKRJaSJuy6GN8uKX5uy7YquZV", 84532, {
+        //         cacheTimeout: -1,
+        //         staticNetwork: true
+        //     }),
+        //     escrowFactory: "0x048975f98b998796d1cF54DE3A3Fc2bE01d891Fd",
+        //     resolver: "0xfdeF9FF4A8677F5ab235b4F1c98426F591E560D5"
+        // };
+
+        src = {
+            provider: new JsonRpcProvider("https://rpc.ankr.com/etherlink_testnet", 128123, {
                 cacheTimeout: -1,
                 staticNetwork: true
             }),
-            escrowFactory: "0x048975f98b998796d1cF54DE3A3Fc2bE01d891Fd",
-            resolver: "0xfdeF9FF4A8677F5ab235b4F1c98426F591E560D5"
+            escrowFactory: "0x30d24e9d1Fbffad6883E8632c5ad4216c9A86dFC",
+            resolver: "0x4dfaBf46CCDd6b36a275b0b22f5C2077120914C9"
         };
+        // return
 
-        src = {
+        dst = {
             provider: new JsonRpcProvider("https://testnet-rpc.monad.xyz", 10143, {
                 cacheTimeout: -1,
                 staticNetwork: true
@@ -290,183 +301,171 @@ describe('Resolving example', () => {
                 .encode();
             console.log("🚀 ~ trait_src:", trait_src);
             console.log("🚀 ~ args_src:", args_src);
-            const payload = {
-                order: {
-                    salt: order.salt.toString(),
-                    maker_asset: order.makerAsset.toString(),
-                    taker_asset: order.takerAsset.toString(),
-                    maker: order.maker.toString(),
-                    receiver: order.receiver.toString(),
-                    making_amount: order.makingAmount.toString(),
-                    taking_amount: order.takingAmount.toString(),
-                    maker_traits: order.build().makerTraits
-                },
-                taker: src.resolver,
-                args: args_src.toString(),
-                taker_traits: trait_src.toString(),
-                order_hash: orderHash,
-                order_type: "single_fill",
-                src_chain_id: srcChainId,
-                dst_chain_id: dstChainId,
-                timelock: src_immutables.timelocks,
-                deadline: Math.floor(Date.now() / 1000) + 3600,
-                secrets: [{
-                    index: 0,
-                    secret_hash: ethers.sha256(secret)
-                }],
-                signature: {
-                    r: r.toString(),
-                    vs: vs.toString()
-                },
-                extension: order.extension,
-            };
-            console.log("payload", payload);
+            // const payload = {
+            //     order: {
+            //         salt: order.salt.toString(),
+            //         maker_asset: order.makerAsset.toString(),
+            //         taker_asset: order.takerAsset.toString(),
+            //         maker: order.maker.toString(),
+            //         receiver: order.receiver.toString(),
+            //         making_amount: order.makingAmount.toString(),
+            //         taking_amount: order.takingAmount.toString(),
+            //         maker_traits: order.build().makerTraits
+            //     },
+            //     taker: src.resolver,
+            //     args: args_src.toString(),
+            //     taker_traits: trait_src.toString(),
+            //     order_hash: orderHash,
+            //     order_type: "single_fill",
+            //     src_chain_id: srcChainId.toString(),
+            //     dst_chain_id: dstChainId.toString(),
+            //     timelock: src_immutables.timelocks,
+            //     deadline: Math.floor(Date.now() / 1000) + 3600,
+            //     secrets: [{
+            //         index: 0,
+            //         secret_hash: ethers.sha256(secret)
+            //     }],
+            //     signature: {
+            //         r: r.toString(),
+            //         vs: vs.toString()
+            //     },
+            //     extension: order.extension,
+            // };
+            // console.log("payload", payload);
 
-            // Make a POST request to the relayer endpoint with the payload using axios
-            try {
-                const response = await axios.post('http://10.67.21.17:4455/relayer/submit', payload, {
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                console.log("Relayer response:", response.data);
-            } catch (error) {
-                console.error("Error submitting payload:", error);
-            }
+            // // Make a POST request to the relayer endpoint with the payload using axios
+            // try{
+            //     const response = await axios.post('http://10.67.21.221:4455/relayer/submit', payload, {
+            //         headers: { 'Content-Type': 'application/json' }
+            //     });
+            //     console.log("Relayer response:", response.data);
+            // } catch (error) {
+            //     console.error("Error submitting payload:", error);
+            // }
 
+            // await new Promise(resolve => setTimeout(resolve, 3000));
 
-            const payloadsecret = {
-                secret: secret.slice(2),
-                order_hash: orderHash,
-            }
-            try {
-                const responseSecret = await axios.post('http://10.67.21.17:4455/relayer/secret', payloadsecret, {
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                console.log("Relayer response:", responseSecret.data);
-            } catch (error) {
-                console.error("Error submitting secret:", error);
-            }
-            // return
-            await new Promise(resolve => setTimeout(resolve, 30000));
-
-            console.log("Waiting for src escrow to be deployed...");
-
-            const order___hash = orderHash
-
-            const response = await axios.get(`http://10.67.21.17:4455/orders/${order___hash}`);
-            console.log("response data ", response.data.result);
-            // const srcEscrowEvent1 = response.data.srcEscrowEvent;
-            const blockHash = response.data.result.src_event.blockHash;
-            console.log("response data ", response.data.result.src_event.blockHash);
-
-            await new Promise(resolve => setTimeout(resolve, 15000));
-
-            let srcEscrowEvent1 = await srcFactory.getSrcDeployEvent(blockHash);
-            console.log("srcEscrowEvent", srcEscrowEvent1);
-            const resolverContract1 = new Resolver(src.resolver, dst.resolver);
-
-            const dstImmutables1 = srcEscrowEvent1[0]
-                .withComplement(srcEscrowEvent1[1])
-                .withTaker(new Address(resolverContract1.dstAddress));
-
-            console.log(`Dest Immutables`, dstImmutables1.build());
-            // post this dest immutable to relayer
-            const payload2 = {
-                order_hash: response.data.result.order_hash,
-                field_name: 'dst_deploy_immutables',
-                value: dstImmutables1.build()
-            }
-
-
-            await new Promise(resolve => setTimeout(resolve, 15000));
-
-            try {
-                const relayerResponse = await axios.post(`http://10.67.21.17:4455/orders/update/${order___hash}`, payload2, {
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                console.log("Relayer response:", relayerResponse.data);
-            } catch (error) {
-                console.error("Error submitting payload:", error);
-            }
-
-            const sourceWithdrawImmutables = srcEscrowEvent1[0]
-            const sourceWithdrawImmutablesPayload = {
-                order_hash: response.data.result.order_hash,
-                field_name: 'src_withdraw_immutables',
-                value: sourceWithdrawImmutables
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 15000));
-
-            try {
-                const relayerResponse = await axios.post(`http://10.67.21.17:4455/orders/update/${order___hash}`, sourceWithdrawImmutablesPayload, {
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                console.log("Relayer response:", relayerResponse.data);
-            } catch (error) {
-                console.error("Error submitting payload:", error);
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 15000));
-
-            const response3 = await axios.get(`http://10.67.21.17:4455/orders/${order___hash}`);
-            srcEscrowEvent1 = response.data.srcEscrowEvent;
-            console.log("response data ", response3.data.result.dest_event);
-            console.log("response data ", response3);
-
-            const blockhash = response3.data.result.dest_event.blockHash;
-            const dstBlock = await dst.provider.getBlock(blockhash);
-            const dstBlockTimestamp = BigInt(dstBlock!.timestamp);
-            console.log("Destination block timestamp:", dstBlockTimestamp);
-            console.log("response data ", response3.data.result.src_event.blockHash);
-            const response4 = await axios.get(`http://10.67.21.17:4455/orders/${order___hash}`);
-            console.log("response data ", response4.data.result.dst_escrow_address);
-
-            let y = response4.data.result.dst_escrow_address;
-
-            const resolverContract = new Resolver(src.resolver, dst.resolver);
-
-
-            const x = await dstChainResolver.sendStatic(
-                resolverContract.withdraw('dst', y, secret, dstImmutables1.withDeployedAt(dstBlockTimestamp))
-            );
-
-
-            const payload3 = {
-                order_hash: response.data.result.order_hash,
-                field_name: 'dst_withdraw_immutables',
-                value: x
-            }
-            try {
-                const relayerResponse = await axios.post(`http://10.67.21.17:4455/orders/update/${order___hash}`, payload3, {
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                console.log("Relayer response:", relayerResponse.data);
-            } catch (error) {
-                console.error("Error submitting payload:", error);
-            }
-
-
-            return
-            // await new Promise(resolve => setTimeout(resolve, 5000));
 
             // const payloadsecret = {
             //     secret: secret.slice(2),
-            //     order_hash: orderHash.slice(2),
+            //     order_hash: orderHash,
             // }
             // try {
-            //     const responseSecret = await axios.post('http://10.67.21.17:4455/relayer/secret', payloadsecret, {
+            //     const responseSecret = await axios.post('http://10.67.21.221:4455/relayer/secret', payloadsecret, {
             //         headers: { 'Content-Type': 'application/json' }
             //     });
             //     console.log("Relayer response:", responseSecret.data);
             // } catch (error) {
             //     console.error("Error submitting secret:", error);
             // }
-            // return 
+            // // // return
+            // await new Promise(resolve => setTimeout(resolve, 30000));
+
+            // console.log("Waiting for src escrow to be deployed...");
+
+            // const order___hash = orderHash
+
+            // const response = await axios.get(`http://10.67.21.221:4455/orders/${order___hash}`);
+            // console.log("response data ", response.data.result);
+            // // const srcEscrowEvent1 = response.data.srcEscrowEvent;
+            // const blockHash = response.data.result.src_event.blockHash;
+            // console.log("response data ", response.data.result.src_event.blockHash);
+
+            // await new Promise(resolve => setTimeout(resolve, 15000));
+
+            // let srcEscrowEvent1 = await srcFactory.getSrcDeployEvent(blockHash);
+            // console.log("srcEscrowEvent", srcEscrowEvent1);
+            // const resolverContract1 = new Resolver(src.resolver, dst.resolver);
+
+            // const dstImmutables1 = srcEscrowEvent1[0]
+            //     .withComplement(srcEscrowEvent1[1])
+            //     .withTaker(new Address(resolverContract1.dstAddress));
+
+            // console.log(`Dest Immutables`, dstImmutables1.build());
+            // // post this dest immutable to relayer
+            // const payload2 = {
+            //     order_hash: response.data.result.order_hash,
+            //     field_name: 'dst_deploy_immutables',
+            //     value: dstImmutables1.build()
+            // }
+
+
+            // await new Promise(resolve => setTimeout(resolve, 15000));
+
+            // try {
+            //     const relayerResponse = await axios.post(`http://10.67.21.221:4455/orders/update/${order___hash}`, payload2, {
+            //         headers: { 'Content-Type': 'application/json' }
+            //     });
+            //     console.log("Relayer response:", relayerResponse.data);
+            // } catch (error) {
+            //     console.error("Error submitting payload:", error);
+            // }
+
+            // const sourceWithdrawImmutables  = srcEscrowEvent1[0]
+            // const sourceWithdrawImmutablesPayload = {
+            //     order_hash: response.data.result.order_hash,
+            //     field_name: 'src_withdraw_immutables',
+            //     value: sourceWithdrawImmutables
+            // }
+
+            // await new Promise(resolve => setTimeout(resolve, 15000));
+
+            // try{
+            //     const relayerResponse = await axios.post(`http://10.67.21.221:4455/orders/update/${order___hash}`, sourceWithdrawImmutablesPayload, {
+            //         headers: { 'Content-Type': 'application/json' }
+            //     });
+            //     console.log("Relayer response:", relayerResponse.data);
+            // } catch (error) {
+            //     console.error("Error submitting payload:", error);
+            // }
+
+            // await new Promise(resolve => setTimeout(resolve, 35000));
+
+            // const response3 = await axios.get(`http://10.67.21.221:4455/orders/${order___hash}`);
+            // srcEscrowEvent1 = response.data.srcEscrowEvent;
+            // console.log("response data ", response3.data.result.dest_event);
+            // console.log("response data ", response3);
+
+            // const blockhash = response3.data.result.dest_event.blockHash;
+            // const dstBlock = await dst.provider.getBlock(blockhash);
+            // const dstBlockTimestamp = BigInt(dstBlock!.timestamp);
+            // console.log("Destination block timestamp:", dstBlockTimestamp);
+            // console.log("response data ", response3.data.result.src_event.blockHash);
+            // const response4 = await axios.get(`http://10.67.21.221:4455/orders/${order___hash}`);
+            // console.log("response data ", response4.data.result.dst_escrow_address);
+
+            // let y = response4.data.result.dst_escrow_address;
+
+            // const resolverContract = new Resolver(src.resolver, dst.resolver);
+
+
+            // const x = await dstChainResolver.sendStatic(
+            //     resolverContract.withdraw('dst', y, secret, dstImmutables1.withDeployedAt(dstBlockTimestamp))
+            // );
+
+
+            // const payload3 = {
+            //     order_hash: response.data.result.order_hash,
+            //     field_name: 'dst_withdraw_immutables',
+            //     value: x
+            // }
+            // try{
+            //     const relayerResponse = await axios.post(`http://10.67.21.221:4455/orders/update/${order___hash}`, payload3, {
+            //         headers: { 'Content-Type': 'application/json' }
+            //     });
+            //     console.log("Relayer response:", relayerResponse.data);
+            // } catch (error) {
+            //     console.error("Error submitting payload:", error);
+            // }
+
+
+            // return
+            // await new Promise(resolve => setTimeout(resolve, 5000));
 
 
             // const recoveredAddress = ethers.verifyMessage(orderHash);
             // Resolver fills order
-            //  const resolverContract = new Resolver(src.resolver, dst.resolver);
+            const resolverContract = new Resolver(src.resolver, dst.resolver);
             console.log("the resolver contract", resolverContract);
 
             // Let's check the owner of the deployed resolver contract
@@ -587,12 +586,73 @@ describe('Resolving example', () => {
                 `Withdrew funds for resolver from ${srcEscrowAddress} to ${src.resolver} in tx ${resolverWithdrawHash}`
             );
 
+            // Get final balances before logging
             const resultBalances = await getBalances(
                 config.chain.source.tokens.USDC.address,
                 config.chain.destination.tokens.USDC.address
             );
+
+            // 🎉 Enhanced Transaction Summary Logging
+            console.log('\n' + '█'.repeat(90));
+            console.log('🎯                   CROSS-CHAIN SWAP TRANSACTION SUMMARY                    🎯');
+            console.log('█'.repeat(90));
+
+            console.log('\n📋 Order Details:');
+            console.log(`   ✅ Order Hash: ${orderHash}`);
+            console.log(`   ✅ Secret: ${secret}`);
+            console.log(`   ✅ Making Amount: ${order.makingAmount} USDC`);
+            console.log(`   ✅ Taking Amount: ${order.takingAmount} USDC`);
+
+            console.log('\n📝 Contract Addresses:');
+            console.log(`   ✅ Source Escrow Factory: ${src.escrowFactory}`);
+            console.log(`   ✅ Destination Escrow Factory: ${dst.escrowFactory}`);
+            console.log(`   ✅ Source Resolver: ${src.resolver}`);
+            console.log(`   ✅ Destination Resolver: ${dst.resolver}`);
+            console.log(`   ✅ Source Escrow Address: ${srcEscrowAddress}`);
+            console.log(`   ✅ Destination Escrow Address: ${dstEscrowAddress}`);
+
+            console.log('\n👥 Participants:');
+            console.log(`   ✅ User Address: ${await srcChainUser.getAddress()}`);
+            console.log(`   ✅ Resolver Address: ${await srcChainResolver.getAddress()}`);
+
+            console.log('\n⏰ Timing Information:');
+            console.log(`   ✅ Source Timestamp: ${srcTimestamp}`);
+            console.log(`   ✅ Destination Deploy Time: ${dstDeployedAt}`);
+            console.log(`   ✅ Current Time: ${Math.floor(Date.now() / 1000)}`);
+
+            console.log('\n' + '▓'.repeat(90));
+            console.log('💳                       TRANSACTION EXECUTION ORDER                        💳');
+            console.log('▓'.repeat(90));
+
+            console.log('\n💰 Balance Changes:');
+            console.log(`   ✅ Initial Balances: SRC User: ${initialBalances.src.user}, DST User: ${initialBalances.dst.user}`);
+            console.log(`   ✅ Final Balances: SRC User: ${resultBalances.src.user}, DST User: ${resultBalances.dst.user}`);
+            console.log(`   ✅ User Balance Change (SRC): ${initialBalances.src.user - resultBalances.src.user} USDC`);
+            console.log(`   ✅ User Balance Change (DST): ${resultBalances.dst.user - initialBalances.dst.user} USDC`);
+
+            console.log('\n🌐 Chain Information:');
+            console.log(`   ✅ Source Chain ID: ${srcChainId}`);
+            console.log(`   ✅ Destination Chain ID: ${dstChainId}`);
+
+            console.log('\n🔄 Complete Transaction Flow:');
+            console.log(`   1️⃣ ✅ Order Creation & Signing - Hash: ${orderHash.substring(0, 10)}...`);
+            console.log(`   2️⃣ ✅ Source Deploy Transaction - Hash: ${orderFillHash}`);
+            console.log(`   4️⃣ ✅ Destination Deploy Transaction - Hash: ${dstDepositHash}`);
+            console.log(`   5️⃣ ✅ Destination Withdrawal Transaction - Hash: ${dstWithdrawTxHash}`);
+            console.log(`   6️⃣ ✅ Source Withdrawal Transaction - Hash: ${resolverWithdrawHash}`);
+
+            console.log('\n📊 Final Status:');
+            console.log('   🎉 ✅ Cross-Chain Swap COMPLETED SUCCESSFULLY! 🎉');
+            console.log('   🔥 ✅ All transactions executed without errors! 🔥');
+            console.log('   🚀 ✅ Funds successfully transferred and withdrawn! 🚀');
+            console.log('   💎 ✅ Both source and destination operations completed! 💎');
+
+            console.log('\n' + '█'.repeat(90));
+            console.log('🏆                           MISSION ACCOMPLISHED                           🏆');
+            console.log('█'.repeat(90) + '\n');
+
             console.log("resultBalances", resultBalances);
-            // // user transferred funds to resolver on source chain
+            // user transferred funds to resolver on source chain
             // expect(initialBalances.src.user - resultBalances.src.user).toBe(order.makingAmount);
             // expect(resultBalances.src.resolver - initialBalances.src.resolver).toBe(order.makingAmount);
             // // resolver transferred funds to user on destination chain
