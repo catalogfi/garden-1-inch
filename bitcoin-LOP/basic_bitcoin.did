@@ -1,0 +1,61 @@
+type satoshi = nat64;
+
+type millisatoshi_per_vbyte = nat64;
+
+type bitcoin_address = text;
+
+type network = variant {
+  regtest;
+  testnet;
+  mainnet;
+};
+
+type outpoint = record {
+  txid : blob;
+  vout : nat32;
+};
+
+type utxo = record {
+  outpoint : outpoint;
+  value : satoshi;
+  height : nat32;
+};
+
+type get_utxos_response = record {
+  utxos : vec utxo;
+  tip_block_hash : block_hash;
+  tip_height : nat32;
+  next_page : opt blob;
+};
+
+type block_hash = blob;
+
+type order_detail = record {
+  initiator_pubkey : text;
+  time_lock : nat64;
+  secret_hash : text;
+  order_address : opt text;
+};
+
+type order_withdraw_info = record {
+  order_address : text;
+  order_balance : nat64;
+  htlc_address : text;
+  order_details : order_detail;
+};
+
+service : (network) -> {
+  // Basic Bitcoin functionality
+  "get_balance" : (address : bitcoin_address) -> (satoshi);
+  "get_utxos" : (bitcoin_address) -> (get_utxos_response);
+  "get_current_fee_percentiles" : () -> (vec millisatoshi_per_vbyte);
+
+  // Order Protocol functionality
+  "create_order" : (initiator_pubkey: text, time_lock: nat64, secret_hash: text) -> (nat64);
+  "get_order" : (order_no: nat64) -> (opt order_detail) query;
+  "get_all_orders" : () -> (vec record { nat64; order_detail }) query;
+  "get_next_order_no" : () -> (nat64) query;
+  "get_order_address" : (order_no: nat64) -> (variant { Ok: text; Err: text });
+  "preview_order_withdrawal" : (order_no: nat64, responder_pubkey: text) -> (variant { Ok: order_withdraw_info; Err: text });
+  "execute_order_withdraw_to_htlc" : (order_no: nat64, responder_pubkey: text, amount_in_satoshi: nat64) -> (variant { Ok: text; Err: text });
+};
